@@ -28,6 +28,12 @@ export function spread(args, attrs_to_add) {
 				attributes.style = style_object_to_string(merge_ssr_styles(attributes.style, styles_to_add));
 			}
 		}
+
+		if (attrs_to_add.actions) {
+			for (const fn of attrs_to_add.actions) {
+				fn(attributes);
+			}
+		}
 	}
 
 	let str = '';

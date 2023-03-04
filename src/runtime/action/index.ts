@@ -53,4 +53,9 @@ export interface ActionReturn<Parameter = any, Attributes extends Record<string,
  */
 export interface Action<Element = HTMLElement, Parameter = any, Attributes extends Record<string, any> = Record<never, any>> {
 	<Node extends Element>(node: Node, parameter?: Parameter): void | ActionReturn<Parameter, Attributes>;
+	SSR?: ActionSSR;
+}
+
+export interface ActionSSR<Parameter = any> {
+	(attributes: Record<string,any>, parameter?: Parameter): void;
 }

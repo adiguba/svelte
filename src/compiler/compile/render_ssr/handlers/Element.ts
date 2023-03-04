@@ -55,7 +55,15 @@ export default function (node: Element, renderer: Renderer, options: RenderOptio
 		style_expression_list.length > 0 &&
 		x`{ ${style_expression_list} }`;
 
-	if (node.attributes.some(attr => attr.is_spread)) {
+	const action_expression_list = node.actions.map(action => {
+		const snippet = action.expression?.node;
+		return x`(a) => ${action.name}.SSR && ${action.name}.SSR(a, ${snippet})`;
+	});
+	const action_expression =
+		action_expression_list.length > 0 
+		&& x`[ ${action_expression_list} ]`;
+
+	if (action_expression || node.attributes.some(attr => attr.is_spread)) {
 		// TODO dry this out
 		const args = [];
 		node.attributes.forEach(attribute => {
@@ -84,7 +92,7 @@ export default function (node: Element, renderer: Renderer, options: RenderOptio
 			}
 		});
 
-		renderer.add_expression(x`@spread([${args}], { classes: ${class_expression}, styles: ${style_expression} })`);
+		renderer.add_expression(x`@spread([${args}], { classes: ${class_expression}, styles: ${style_expression}, actions: ${action_expression}})`);
 	} else {
 		let add_class_attribute = !!class_expression;
 		let add_style_attribute = !!style_expression;
