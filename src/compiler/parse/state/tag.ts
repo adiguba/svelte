@@ -406,6 +406,20 @@ function read_attribute(parser: Parser, unique_names: Set<string>) {
 		const first_value = value[0];
 		let expression = null;
 
+		if (type === 'Action' && directive_name === 'class') {
+			if ((value as any[]).length === 1 && first_value.type === 'Text') {
+				return {
+					start,
+					end,
+					type: 'UseClass',
+					name: first_value.raw
+				};
+			} else {
+				// TODO : better error
+				parser.error(parser_errors.invalid_directive_value, first_value.start);
+			}
+		}
+
 		if (first_value) {
 			const attribute_contains_text = (value as any[]).length > 1 || first_value.type === 'Text';
 			if (attribute_contains_text) {

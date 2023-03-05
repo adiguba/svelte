@@ -279,6 +279,7 @@ export default class Element extends Node {
 	actions: Action[] = [];
 	bindings: Binding[] = [];
 	classes: Class[] = [];
+	useClasses: Set<string> = null;
 	styles: StyleDirective[] = [];
 	handlers: EventHandler[] = [];
 	lets: Let[] = [];
@@ -374,6 +375,17 @@ export default class Element extends Node {
 
 		info.attributes.forEach(node => {
 			switch (node.type) {
+				case 'UseClass':
+					if (this.useClasses === null) {
+						this.useClasses = new Set();
+					}
+					for (const n of node.name.split(' ')) {
+						if (n !== '') {
+							this.useClasses.add(n);
+						}
+					}
+					break;
+
 				case 'Action':
 					this.actions.push(new Action(component, this, scope, node));
 					break;
@@ -391,6 +403,7 @@ export default class Element extends Node {
 					break;
 
 				case 'Class':
+					console.log(node);
 					this.classes.push(new Class(component, this, scope, node));
 					break;
 

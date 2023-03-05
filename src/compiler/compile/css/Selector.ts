@@ -324,7 +324,10 @@ function block_might_apply_to_node(block: Block, node: Element): BlockAppliesToN
 		}
 
 		if (selector.type === 'ClassSelector') {
-			if (!attribute_matches(node, 'class', name, '~=', false) && !node.classes.some(c => c.name === name)) return BlockAppliesToNode.NotPossible;
+			if (!attribute_matches(node, 'class', name, '~=', false) && !node.classes.some(c => c.name === name)
+				&& (node.useClasses === null || !node.useClasses.has(name))) {
+					return BlockAppliesToNode.NotPossible;
+				}
 		} else if (selector.type === 'IdSelector') {
 			if (!attribute_matches(node, 'id', name, '=', false)) return BlockAppliesToNode.NotPossible;
 		} else if (selector.type === 'AttributeSelector') {
