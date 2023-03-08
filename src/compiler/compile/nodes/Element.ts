@@ -376,14 +376,10 @@ export default class Element extends Node {
 		info.attributes.forEach(node => {
 			switch (node.type) {
 				case 'UseClass':
-					if (this.useClasses === null) {
-						this.useClasses = new Set();
+					if (this.useClasses !== null) {
+						return component.error(node, compiler_errors.duplicate_use_class);
 					}
-					for (const n of node.name.split(' ')) {
-						if (n !== '') {
-							this.useClasses.add(n);
-						}
-					}
+					this.useClasses = new Set(node.name.split(' ').filter(n => n !== ''));
 					break;
 
 				case 'Action':
@@ -403,7 +399,6 @@ export default class Element extends Node {
 					break;
 
 				case 'Class':
-					console.log(node);
 					this.classes.push(new Class(component, this, scope, node));
 					break;
 

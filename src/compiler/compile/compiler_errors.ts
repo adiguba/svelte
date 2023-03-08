@@ -289,5 +289,9 @@ export default {
 	invalid_style_directive_modifier: (valid: string) => ({
 		code: 'invalid-style-directive-modifier',
 		message: `Valid modifiers for style directives are: ${valid}`
-	})
+	}),
+	duplicate_use_class: {
+		code: 'duplicate-use-class',
+		message: "An element can only have one 'use:class' directive"
+	}
 };

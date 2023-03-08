@@ -407,17 +407,18 @@ function read_attribute(parser: Parser, unique_names: Set<string>) {
 		let expression = null;
 
 		if (type === 'Action' && directive_name === 'class') {
+			let name : string;
 			if ((value as any[]).length === 1 && first_value.type === 'Text') {
-				return {
-					start,
-					end,
-					type: 'UseClass',
-					name: first_value.raw
-				};
+				name = first_value.raw;
 			} else {
-				// TODO : better error
-				parser.error(parser_errors.invalid_directive_value, first_value.start);
+				parser.error(parser_errors.invalid_use_class_value, first_value.start);
 			}
+			return {
+				start,
+				end,
+				type: 'UseClass',
+				name
+			};
 		}
 
 		if (first_value) {

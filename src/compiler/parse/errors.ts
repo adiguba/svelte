@@ -212,5 +212,9 @@ export default {
 	unexpected_token_destructure: {
 		code: 'unexpected-token',
 		message: 'Expected identifier or destructure pattern'
-	}
+	},
+	invalid_use_class_value: {
+		code: 'invalid-use-class-value',
+		message: 'Directive use:class value must be a static text'
+	},
 };
