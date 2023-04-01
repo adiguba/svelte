@@ -35,5 +35,6 @@ export interface T$$ {
 	on_destroy: any[];
 	skip_bound: boolean;
 	on_disconnect: any[];
-	root:Element | ShadowRoot
+	root:Element | ShadowRoot,
+	error?: any;
 }

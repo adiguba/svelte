@@ -68,8 +68,14 @@ export function flush() {
 			while (flushidx < dirty_components.length) {
 				const component = dirty_components[flushidx];
 				flushidx++;
-				set_current_component(component);
-				update(component.$$);
+				if (component.$$.error === undefined) {
+					set_current_component(component);
+					try {
+						update(component.$$);
+					} catch (err) {
+						component.$$.error = err;
+					}
+				}
 			}
 		} catch (e) {
 			// reset dirty state to not end up in a deadlocked state and then rethrow

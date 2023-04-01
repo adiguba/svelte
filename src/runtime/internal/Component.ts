@@ -29,19 +29,22 @@ export function mount_component(component, target, anchor, customElement) {
 	if (!customElement) {
 		// onMount happens before the initial afterUpdate
 		add_render_callback(() => {
-
-			const new_on_destroy = component.$$.on_mount.map(run).filter(is_function);
-			// if the component was destroyed immediately
-			// it will update the `$$.on_destroy` reference to `null`.
-			// the destructured on_destroy may still reference to the old array
-			if (component.$$.on_destroy) {
-				component.$$.on_destroy.push(...new_on_destroy);
-			} else {
-				// Edge case - component was destroyed immediately,
-				// most likely as a result of a binding initialising
-				run_all(new_on_destroy);
+			try {
+				const new_on_destroy = component.$$.on_mount.map(run).filter(is_function);
+				// if the component was destroyed immediately
+				// it will update the `$$.on_destroy` reference to `null`.
+				// the destructured on_destroy may still reference to the old array
+				if (component.$$.on_destroy) {
+					component.$$.on_destroy.push(...new_on_destroy);
+				} else {
+					// Edge case - component was destroyed immediately,
+					// most likely as a result of a binding initialising
+					run_all(new_on_destroy);
+				}
+				component.$$.on_mount = [];
+			} catch (err) {
+				component.$$.error = err;
 			}
-			component.$$.on_mount = [];
 		});
 	}
 
@@ -73,6 +76,10 @@ function make_dirty(component, i) {
 	component.$$.dirty[(i / 31) | 0] |= (1 << (i % 31));
 }
 
+function throw_error(err) {
+	throw err;
+}
+
 export function init(component, options, instance, create_fragment, not_equal, props, append_styles, dirty = [-1]) {
 	const parent_component = current_component;
 	set_current_component(component);
@@ -89,6 +96,7 @@ export function init(component, options, instance, create_fragment, not_equal, p
 
 		// lifecycle
 		on_mount: [],
+		on_error: (parent_component ? parent_component.$$.on_error : throw_error),
 		on_destroy: [],
 		on_disconnect: [],
 		before_update: [],
@@ -101,47 +109,49 @@ export function init(component, options, instance, create_fragment, not_equal, p
 		skip_bound: false,
 		root: options.target || parent_component.$$.root
 	};
+	try {
+		append_styles && append_styles($$.root);
 
-	append_styles && append_styles($$.root);
+		let ready = false;
 
-	let ready = false;
+		$$.ctx = instance
+			? instance(component, options.props || {}, (i, ret, ...rest) => {
+				const value = rest.length ? rest[0] : ret;
+				if ($$.ctx && not_equal($$.ctx[i], $$.ctx[i] = value)) {
+					if (!$$.skip_bound && $$.bound[i]) $$.bound[i](value);
+					if (ready) make_dirty(component, i);
+				}
+				return ret;
+			})
+			: [];
 
-	$$.ctx = instance
-		? instance(component, options.props || {}, (i, ret, ...rest) => {
-			const value = rest.length ? rest[0] : ret;
-			if ($$.ctx && not_equal($$.ctx[i], $$.ctx[i] = value)) {
-				if (!$$.skip_bound && $$.bound[i]) $$.bound[i](value);
-				if (ready) make_dirty(component, i);
+		$$.update();
+		ready = true;
+		run_all($$.before_update);
+
+		// `false` as a special case of no DOM component
+		$$.fragment = create_fragment ? create_fragment($$.ctx) : false;
+
+		if (options.target) {
+			if (options.hydrate) {
+				start_hydrating();
+				const nodes = children(options.target);
+				// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+				$$.fragment && $$.fragment!.l(nodes);
+				nodes.forEach(detach);
+			} else {
+				// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+				$$.fragment && $$.fragment!.c();
 			}
-			return ret;
-		})
-		: [];
 
-	$$.update();
-	ready = true;
-	run_all($$.before_update);
-
-	// `false` as a special case of no DOM component
-	$$.fragment = create_fragment ? create_fragment($$.ctx) : false;
-
-	if (options.target) {
-		if (options.hydrate) {
-			start_hydrating();
-			const nodes = children(options.target);
-			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-			$$.fragment && $$.fragment!.l(nodes);
-			nodes.forEach(detach);
-		} else {
-			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-			$$.fragment && $$.fragment!.c();
+			if (options.intro) transition_in(component.$$.fragment);
+			mount_component(component, options.target, options.anchor, options.customElement);
+			end_hydrating();
+			flush();
 		}
-
-		if (options.intro) transition_in(component.$$.fragment);
-		mount_component(component, options.target, options.anchor, options.customElement);
-		end_hydrating();
-		flush();
+	} catch (err) {
+		component.$$.on_error(err);
 	}
-
 	set_current_component(parent_component);
 }
 
