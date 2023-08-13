@@ -79,6 +79,9 @@ export default class Block {
 	 */
 	chunks;
 
+	/** @type {Array<{condition:import('estree').Expression, index:number}>} */
+	event_updaters = [];
+
 	/** @type {import('estree').Node[]} */
 	event_listeners = [];
 
@@ -510,6 +513,11 @@ export default class Block {
 							#mounted = true;
 						}
 					`);
+				if (this.event_updaters.length === 1) {
+					const {condition} = this.event_updaters[0];
+					this.chunks.update.push(b`
+					if (${condition}) ${dispose}.p()`);
+				}
 				this.chunks.destroy.push(b`${dispose}();`);
 			} else {
 				this.chunks.mount.push(b`
@@ -520,6 +528,9 @@ export default class Block {
 						#mounted = true;
 					}
 				`);
+				for (const {condition, index} of this.event_updaters) {
+					this.chunks.update.push(b` if (${condition}) ${dispose}[${index}].p()`);
+				}
 				this.chunks.destroy.push(b`@run_all(${dispose});`);
 			}
 		}

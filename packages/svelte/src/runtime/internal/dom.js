@@ -1,5 +1,5 @@
 import { ResizeObserverSingleton } from './ResizeObserverSingleton.js';
-import { contenteditable_truthy_values, has_prop } from './utils.js';
+import { contenteditable_truthy_values, has_prop, is_function, noop } from './utils.js';
 // Track which nodes are claimed during hydration. Unclaimed nodes can then be removed from the DOM
 // at the end of hydration without touching the remaining nodes.
 let is_hydrating = false;
@@ -348,16 +348,59 @@ export function comment(content) {
 	return document.createComment(content);
 }
 
+
+/**
+ * @param {EventListenerOrEventListenerObject} handler
+ * @param {Function[]} [wrappers]
+ * @returns {EventListener}
+ */
+export function wrap_handler(handler, wrappers) {
+	let result = is_function(handler) ? handler : handler.handleEvent.bind(handler);
+	if (wrappers) {
+		for (const fn of wrappers) {
+			result = fn(result);
+		}
+	}
+	return result;
+}
+
 /**
  * @param {EventTarget} node
  * @param {string} event
- * @param {EventListenerOrEventListenerObject} handler
- * @param {boolean | AddEventListenerOptions | EventListenerOptions} [options]
- * @returns {() => void}
+ * @param {EventListenerOrEventListenerObject | null | undefined | false} handler
+ * @param {boolean | AddEventListenerOptions | EventListenerOptions | undefined} [options]
+ * @param {Function[] | undefined} [wrappers]
+ * @returns {() => void} 
  */
-export function listen(node, event, handler, options) {
-	node.addEventListener(event, handler, options);
-	return () => node.removeEventListener(event, handler, options);
+export function listen(node, event, handler, options, wrappers) {
+	if (handler) {
+		const h = wrap_handler(handler, wrappers);
+		node.addEventListener(event, h, options);
+		return () => node.removeEventListener(event, h, options);
+	}
+	return noop;
+}
+
+/**
+ * 
+ * @param {()=>(EventListenerOrEventListenerObject | null | undefined | false)} get_handler 
+ * @param {(handler:EventListenerOrEventListenerObject | null | undefined | false) => Function} factory 
+ * @returns {() => void} 
+ */
+export function listen_and_update(get_handler, factory) {
+	let handler = get_handler();
+	let dispose_handle = factory(handler);
+	const dispose = () => dispose_handle();
+	// update :
+	dispose.p = () => {
+		const new_handler = get_handler();
+		if (new_handler !== handler) {
+			dispose_handle();
+			handler = new_handler;
+			dispose_handle = factory(handler);
+		}
+	};
+	return dispose;
 }
 
 /**

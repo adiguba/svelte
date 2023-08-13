@@ -6,13 +6,19 @@ import {
 	insert_hydration,
 	detach,
 	listen,
-	attr
+	attr,
+	prevent_default,
+	stop_propagation,
+	trusted,
+	self,
+	stop_immediate_propagation
 } from './dom.js';
 import { SvelteComponent } from './Component.js';
 import { is_void } from '../../shared/utils/names.js';
 import { VERSION } from '../../shared/version.js';
 import { contenteditable_truthy_values } from './utils.js';
 import { ensure_array_like } from './each.js';
+import { bubble, listen_comp, restart_all_callback } from './lifecycle.js';
 
 /**
  * @template T
@@ -105,37 +111,88 @@ export function detach_after_dev(before) {
 	}
 }
 
+
+
+
+/**
+ * @param {boolean | AddEventListenerOptions | EventListenerOptions | undefined} options
+ * @param {Function[] | undefined} wrappers
+ */
+function build_modifiers(options, wrappers) {
+	const modifiers = options === true ? [ 'capture' ] : options ? Array.from(Object.keys(options)) : [];
+	if (wrappers) {
+		if (wrappers.indexOf(prevent_default) >= 0) modifiers.push('preventDefault');
+		if (wrappers.indexOf(stop_propagation) >= 0) modifiers.push('stopPropagation');
+		if (wrappers.indexOf(stop_immediate_propagation) >= 0) modifiers.push('stopImmediatePropagation');
+		// ???
+		if (wrappers.indexOf(trusted) >= 0) modifiers.push('trusted');
+		if (wrappers.indexOf(self) >= 0) modifiers.push('self');
+	}
+	return modifiers;
+}
+
 /**
  * @param {Node} node
  * @param {string} event
  * @param {EventListenerOrEventListenerObject} handler
- * @param {boolean | AddEventListenerOptions | EventListenerOptions} [options]
- * @param {boolean} [has_prevent_default]
- * @param {boolean} [has_stop_propagation]
- * @param {boolean} [has_stop_immediate_propagation]
+ * @param {boolean | AddEventListenerOptions | EventListenerOptions | undefined} options
+ * @param {Function[] | undefined} wrappers
  * @returns {() => void}
  */
-export function listen_dev(
-	node,
-	event,
-	handler,
-	options,
-	has_prevent_default,
-	has_stop_propagation,
-	has_stop_immediate_propagation
-) {
-	const modifiers =
-		options === true ? ['capture'] : options ? Array.from(Object.keys(options)) : [];
-	if (has_prevent_default) modifiers.push('preventDefault');
-	if (has_stop_propagation) modifiers.push('stopPropagation');
-	if (has_stop_immediate_propagation) modifiers.push('stopImmediatePropagation');
+export function listen_dev(node, event, handler, options, wrappers) {
+	const modifiers = build_modifiers(options, wrappers);
 	dispatch_dev('SvelteDOMAddEventListener', { node, event, handler, modifiers });
-	const dispose = listen(node, event, handler, options);
+
+	const dispose = listen(node, event, handler, options, wrappers);
 	return () => {
 		dispatch_dev('SvelteDOMRemoveEventListener', { node, event, handler, modifiers });
 		dispose();
 	};
 }
+
+/**
+ * @param {SvelteComponent} comp
+ * @param {Function} listen_func
+ * @param {EventTarget | SvelteComponent} node
+ * @param {string} type
+ * @param {string} typeName
+ * @returns Function
+ */
+export function bubble_dev(comp, listen_func, node, type, typeName = type) {
+	dispatch_dev('SvelteComponentAddEventBubble', { comp, listen_func, node, type, typeName });
+	const dispose = bubble(comp, listen_func, node, type, typeName);
+	return () => {
+		dispatch_dev('SvelteComponentRemoveEventBubble', { comp, listen_func, node, type, typeName });
+		dispose();
+	};
+}
+
+/**
+ * @param {SvelteComponent} comp
+ * @param {string} event
+ * @param {EventListenerOrEventListenerObject} handler
+ * @param {boolean | AddEventListenerOptions | EventListenerOptions | undefined} options
+ * @param {Function[] | undefined} wrappers
+ * @returns Function
+ */
+export function listen_comp_dev(comp, event, handler, options, wrappers) {
+	const modifiers = build_modifiers(options, wrappers);
+	dispatch_dev('SvelteComponentAddEventListener', { comp, event, handler, modifiers });
+
+	const dispose = listen_comp(comp, event, handler, options, wrappers);
+	return () => {
+		dispatch_dev('SvelteComponentRemoveEventListener', { comp, event, handler, modifiers });
+		dispose();
+	};
+}
+
+/* Hook for restarting callbacks after HMR */
+export function fix_callbacks_hmr_dev(comp) {
+	comp.$$.on_hmr && comp.$$.on_hmr.push( (_) => {
+		return (c) => restart_all_callback(c);
+	});
+}
+
 
 /**
  * @param {Element} node

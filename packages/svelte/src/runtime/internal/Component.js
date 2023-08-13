@@ -5,7 +5,7 @@ import {
 	schedule_update,
 	dirty_components
 } from './scheduler.js';
-import { current_component, set_current_component } from './lifecycle.js';
+import { add_callback, current_component, set_current_component } from './lifecycle.js';
 import { blank_object, is_empty, is_function, run, run_all, noop } from './utils.js';
 import {
 	children,
@@ -115,6 +115,7 @@ export function init(
 		context: new Map(options.context || (parent_component ? parent_component.$$.context : [])),
 		// everything else
 		callbacks: blank_object(),
+		bubbles: blank_object(),
 		dirty,
 		skip_bound: false,
 		root: options.target || parent_component.$$.root
@@ -194,7 +195,7 @@ if (typeof HTMLElement === 'function') {
 			this.$$l[type] = this.$$l[type] || [];
 			this.$$l[type].push(listener);
 			if (this.$$c) {
-				const unsub = this.$$c.$on(type, listener);
+				const unsub = this.$$c.$on(type, listener, options);
 				this.$$l_u.set(listener, unsub);
 			}
 			super.addEventListener(type, listener, options);
@@ -464,19 +465,12 @@ export class SvelteComponent {
 	/**
 	 * @template {Extract<keyof Events, string>} K
 	 * @param {K} type
-	 * @param {((e: Events[K]) => void) | null | undefined} callback
+	 * @param {((e: Events[K]) => void) | null | undefined | false} callback
+	 * @param {boolean | AddEventListenerOptions | EventListenerOptions | undefined} [options]
 	 * @returns {() => void}
 	 */
-	$on(type, callback) {
-		if (!is_function(callback)) {
-			return noop;
-		}
-		const callbacks = this.$$.callbacks[type] || (this.$$.callbacks[type] = []);
-		callbacks.push(callback);
-		return () => {
-			const index = callbacks.indexOf(callback);
-			if (index !== -1) callbacks.splice(index, 1);
-		};
+	$on(type, callback, options) {
+		return add_callback(this, type, callback, options);
 	}
 
 	/**

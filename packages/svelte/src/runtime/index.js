@@ -10,5 +10,6 @@ export {
 	hasContext,
 	tick,
 	createEventDispatcher,
+	onEventListener,
 	SvelteComponentTyped
 } from './internal/index.js';

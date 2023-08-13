@@ -306,5 +306,9 @@ export default {
 		code: 'illegal-attribute-character',
 		message:
 			"Attributes should not contain ':' characters to prevent ambiguity with Svelte directives"
+	},
+	invalid_forward_event_alias: {
+		code: 'invalid-forward-event-alias',
+		message: 'Forward-event accept only one modifier : the event alias name'
 	}
 };

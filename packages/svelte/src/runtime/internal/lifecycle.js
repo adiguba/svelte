@@ -1,4 +1,5 @@
-import { custom_event } from './dom.js';
+import { custom_event, wrap_handler } from './dom.js';
+import { is_function, noop } from './utils.js';
 
 export let current_component;
 
@@ -101,8 +102,8 @@ export function createEventDispatcher() {
 			// TODO are there situations where events could be dispatched
 			// in a server (non-DOM) environment?
 			const event = custom_event(/** @type {string} */ (type), detail, { cancelable });
-			callbacks.slice().forEach((fn) => {
-				fn.call(component, event);
+			callbacks.slice().forEach((cb) => {
+				cb.f.call(component, event);
 			});
 			return !event.defaultPrevented;
 		}
@@ -166,18 +167,200 @@ export function hasContext(key) {
 	return get_current_component().$$.context.has(key);
 }
 
-// TODO figure out if we still want to support
-// shorthand events, or if we want to implement
-// a real bubbling mechanism
 /**
- * @param component
- * @param event
- * @returns {void}
+ * @param {string} type 
+ * @param {import ('./private.d.ts').Bubble} bubble 
+ * @param {import ('./private.d.ts').Callback} callback 
  */
-export function bubble(component, event) {
-	const callbacks = component.$$.callbacks[event.type];
-	if (callbacks) {
-		// @ts-ignore
-		callbacks.slice().forEach((fn) => fn.call(this, event));
+function start_bubble(type, bubble, callback) {
+	const dispose = bubble.f(callback.f, callback.o, type);
+	if (dispose) {
+		bubble.r.set(callback, dispose);
 	}
+}
+
+/**
+ * @param {import ('./Component').SvelteComponent} comp 
+ * @param {import ('./private.d.ts').Bubble} bubble 
+ */
+function start_bubbles(comp, bubble) {
+	for (const type of Object.keys(comp.$$.callbacks)) {
+		comp.$$.callbacks[type].forEach( callback => start_bubble(type, bubble, callback));
+	}
+}
+
+/**
+ * @param {import ('./Component').SvelteComponent} comp 
+ */
+export function restart_all_callback(comp) {
+	for (const type of Object.keys(comp.$$.callbacks)) {
+		for (const callback of comp.$$.callbacks[type]) {
+			start_callback(comp, type, callback);
+		}
+	}
+}
+
+/**
+ * @param {import ('./Component').SvelteComponent} comp 
+ * @param {string} type
+ * @param {import ('./private.d.ts').Callback} callback 
+ */
+function start_callback(comp, type, callback) {
+	for (const bubbles of [ comp.$$.bubbles[type], comp.$$.bubbles['*'] ]) {
+		if (bubbles) {
+			for (const bubble of bubbles) {
+				start_bubble(type, bubble, callback);
+			}
+		}
+	}
+}
+
+/**
+ * @param {import ('./Component').SvelteComponent} comp 
+ * @param {string} type
+ * @param {EventListener | null | undefined | false} f 
+ * @param {boolean | AddEventListenerOptions | EventListenerOptions} [o]
+ */
+export function add_callback(comp, type, f, o) {
+	if (!is_function(f)) {
+		return noop;
+	}
+
+	const callbacks = (comp.$$.callbacks[type] || (comp.$$.callbacks[type] = []));
+	const callback = {f, o};
+
+	if (o && typeof o === 'object' && 'once' in o && o?.once === true) {
+		callback.f = function(...args) {
+			const r = f.call(this, ...args);
+			remove_callback(comp, type, callback);
+			return r;
+		};
+	}
+
+	callbacks.push(callback);
+	start_callback(comp, type, callback);
+	return () => remove_callback(comp, type, callback);
+}
+
+/**
+ * @param {import ('./Component').SvelteComponent} comp 
+ * @param {string} type 
+ * @param {import ('./private.d.ts').Callback} callback 
+ */
+function stop_callback(comp, type, callback) {
+	for (const bubbles of [ comp.$$.bubbles[type], comp.$$.bubbles['*'] ]) {
+		if (bubbles) {
+			for (const bubble of bubbles) {
+				const dispose = bubble.r.get(callback);
+				if (dispose) {
+					dispose();
+					bubble.r.delete(callback);
+				}
+			}
+		}
+	}
+}
+
+/**
+ * @param {import ('./Component').SvelteComponent} comp 
+ * @param {string} type 
+ * @param {import ('./private.d.ts').Callback} callback 
+ */
+function remove_callback(comp, type, callback) {
+	const callbacks = comp.$$.callbacks[type];
+	if (callbacks) {
+		const index = callbacks.indexOf(callback);
+		if (index !== -1) {
+			callbacks.splice(index, 1);
+			stop_callback(comp, type, callback);
+		}
+	}
+}
+
+/**
+ * @param {import ('./Component').SvelteComponent} comp 
+ * @param {string} type 
+ * @param {import ('./private.d.ts').CallbackFactory} f 
+ * @returns {Function}
+ */
+function add_bubble(comp, type, f) {
+	const bubble = {f, r: new Map()};
+	const bubbles = (comp.$$.bubbles[type] || (comp.$$.bubbles[type] = []));
+	bubbles.push(bubble);
+
+	start_bubbles(comp, bubble);
+
+	return () => {
+		const index = bubbles.indexOf(bubble);
+		if (index !== -1) bubbles.splice(index, 1);
+		for (const dispose of bubble.r.values()) {
+			dispose();
+		}
+	};
+}
+
+/**
+ * Schedules a callback to run when an handler is added to the component
+ * 
+ * TODO : Docs
+ * 
+ * @param {string} type 
+ * @param {import ('./private.d.ts').CallbackFactory} fn 
+ */
+
+export function onEventListener(type, fn) {
+	add_bubble(get_current_component(), type, fn);
+}
+
+/**
+ * 
+ * @param {import ('./Component').SvelteComponent} component 
+ * @param {Function} listen_func 
+ * @param {EventTarget | import ('./Component').SvelteComponent} node 
+ * @param {string} type 
+ * @param {string} typeName 
+ * @returns {Function}
+ */
+export function bubble(component, listen_func, node, type, typeName = type) {
+	if (type === '*') {
+		return add_bubble(component, type, (callback, options, eventType) => {
+			/** @type {string | null} */
+			let typeToListen = null;
+			if (typeName === '*') {
+				typeToListen = eventType;
+			} else if (typeName.startsWith('*')) {
+				const len = typeName.length;
+				if (eventType.endsWith(typeName.substring(1))) {
+					typeToListen = eventType.substring(0, eventType.length - (len - 1));
+				}
+			} else if (typeName.endsWith('*')) {
+				const len = typeName.length;
+				if (eventType.startsWith(typeName.substring(0,len - 1))) {
+					typeToListen = eventType.substring(len - 1);
+				}
+			}
+			if (typeToListen) {
+				return listen_func(node, typeToListen, callback, options);
+			}
+		});
+	}
+	return add_bubble(component, typeName, (callback, options) => {
+		return listen_func(node, type, callback, options);
+	});
+}
+
+/**
+ * 
+ * @param {import ('./Component').SvelteComponent} comp 
+ * @param {string} event 
+ * @param {EventListenerOrEventListenerObject | null | undefined | false} handler 
+ * @param {boolean | AddEventListenerOptions | EventListenerOptions} [options]
+ * @param {Function[]} [wrappers]
+ * @returns 
+ */
+export function listen_comp(comp, event, handler, options, wrappers) {
+	if (handler) {
+		return comp.$on(event, wrap_handler(handler, wrappers), options);
+	}
+	return noop;
 }

@@ -383,12 +383,17 @@ export default class InlineComponentWrapper extends Wrapper {
 			component.partly_hoisted.push(body);
 			return b`@binding_callbacks.push(() => @bind(${this.var}, '${binding.name}', ${id}));`;
 		});
-		const munged_handlers = this.node.handlers.map((handler) => {
-			const event_handler = new EventHandler(handler, this);
-			let snippet = event_handler.get_snippet(block);
-			if (handler.modifiers.has('once')) snippet = x`@once(${snippet})`;
-			return b`${name}.$on("${handler.name}", ${snippet});`;
-		});
+		if (this.node.handlers.length > 0) {
+			const target = x`${name}`;
+			if (component.compile_options.dev) {
+				/* Hook for restoring handlers on components after HMR */
+				munged_bindings.push(b`@fix_callbacks_hmr_dev(${target})`);
+			}
+			for (const handler of this.node.handlers) {
+				new EventHandler(handler, this)
+					.render(block, target, true);
+			}
+		}
 		const mount_target = has_css_custom_properties
 			? css_custom_properties_wrapper
 			: parent_node || '#target';
@@ -425,7 +430,6 @@ export default class InlineComponentWrapper extends Wrapper {
 					${name} = @construct_svelte_component(${switch_value}, ${switch_props}(#ctx));
 
 					${munged_bindings}
-					${munged_handlers}
 				}
 			`);
 			block.chunks.create.push(b`if (${name}) @create_component(${name}.$$.fragment);`);
@@ -482,7 +486,6 @@ export default class InlineComponentWrapper extends Wrapper {
 						${name} = @construct_svelte_component(${switch_value}, ${switch_props}(#ctx, #dirty));
 
 						${munged_bindings}
-						${munged_handlers}
 
 						@create_component(${name}.$$.fragment);
 						@transition_in(${name}.$$.fragment, 1);
@@ -517,7 +520,6 @@ export default class InlineComponentWrapper extends Wrapper {
 				${name} = new ${expression}(${component_opts});
 
 				${munged_bindings}
-				${munged_handlers}
 			`);
 			if (has_css_custom_properties) {
 				this.set_css_custom_properties(

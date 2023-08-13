@@ -18,3 +18,6 @@ export function beforeUpdate() {}
 
 /** @returns {void} */
 export function afterUpdate() {}
+
+/** @returns {void} */
+export function onEventListener() {}
