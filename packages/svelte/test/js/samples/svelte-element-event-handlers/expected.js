@@ -33,10 +33,10 @@ function create_dynamic_element(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(svelte_element0, "keydown", /*keydown_handler_1*/ ctx[2]),
-					listen(svelte_element0, "keyup", /*keyup_handler_1*/ ctx[3]),
-					listen(svelte_element1, "keydown", /*keydown_handler*/ ctx[0]),
-					listen(svelte_element1, "keyup", /*keyup_handler*/ ctx[1])
+					bubble(/*$$self*/ ctx[0], listen, svelte_element0, "keydown"),
+					bubble(/*$$self*/ ctx[0], listen, svelte_element0, "keyup"),
+					bubble(/*$$self*/ ctx[0], listen, svelte_element1, "keydown"),
+					bubble(/*$$self*/ ctx[0], listen, svelte_element1, "keyup")
 				];
 
 				mounted = true;
@@ -81,23 +81,7 @@ const a = 'a';
 const span = 'span';
 
 function instance($$self) {
-	function keydown_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function keyup_handler(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function keydown_handler_1(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	function keyup_handler_1(event) {
-		bubble.call(this, $$self, event);
-	}
-
-	return [keydown_handler, keyup_handler, keydown_handler_1, keyup_handler_1];
+	return [$$self];
 }
 
 class Component extends SvelteComponent {

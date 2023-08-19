@@ -63,10 +63,10 @@ function create_fragment(ctx) {
 			if (!mounted) {
 				dispose = [
 					listen(div0, "touchstart", handleTouchstart, { passive: false }),
-					listen(button0, "click", stop_propagation(prevent_default(handleClick))),
+					listen(button0, "click", handleClick, false, [stop_propagation, prevent_default]),
 					listen(button1, "click", handleClick, { once: true, capture: true }),
 					listen(button2, "click", handleClick, true),
-					listen(button3, "click", stop_immediate_propagation(handleClick)),
+					listen(button3, "click", handleClick, false, [stop_immediate_propagation]),
 					listen(button3, "click", handleTouchstart),
 					listen(div1, "touchstart", handleTouchstart, { passive: true })
 				];

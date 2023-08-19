@@ -350,13 +350,18 @@ export function comment(content) {
 
 
 /**
- * @param {EventListenerOrEventListenerObject} handler
+ * @param {EventListenerOrEventListenerObject | null | undefined | false} handler
  * @param {Function[]} [wrappers]
- * @returns {EventListener}
+ * @returns {EventListener | undefined}
  */
 export function wrap_handler(handler, wrappers) {
-	let result = is_function(handler) ? handler : handler.handleEvent.bind(handler);
-	if (wrappers) {
+	let result = undefined;
+	if (is_function(handler)) {
+		result = handler;
+	} else if (handler && typeof handler === 'object' && 'handleEvent' in handler && is_function(handler.handleEvent)) {
+		result = handler.handleEvent.bind(handler);
+	}
+	if (result && wrappers && wrappers.length) {
 		for (const fn of wrappers) {
 			result = fn(result);
 		}
@@ -373,8 +378,8 @@ export function wrap_handler(handler, wrappers) {
  * @returns {() => void} 
  */
 export function listen(node, event, handler, options, wrappers) {
-	if (handler) {
-		const h = wrap_handler(handler, wrappers);
+	const h = wrap_handler(handler, wrappers);
+	if (h) {
 		node.addEventListener(event, h, options);
 		return () => node.removeEventListener(event, h, options);
 	}

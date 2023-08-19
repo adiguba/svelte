@@ -6,8 +6,8 @@ import {
 	element,
 	init,
 	insert,
-	is_function,
 	listen,
+	listen_and_update,
 	noop,
 	run_all,
 	safe_not_equal,
@@ -59,17 +59,15 @@ function create_fragment(ctx) {
 				dispose = [
 					listen(button0, "click", /*updateHandler1*/ ctx[2]),
 					listen(button1, "click", /*updateHandler2*/ ctx[3]),
-					listen(button2, "click", function () {
-						if (is_function(/*clickHandler*/ ctx[0])) /*clickHandler*/ ctx[0].apply(this, arguments);
-					})
+					listen_and_update(() => /*clickHandler*/ ctx[0], h => listen(button2, "click", h))
 				];
 
 				mounted = true;
 			}
 		},
-		p(new_ctx, [dirty]) {
-			ctx = new_ctx;
+		p(ctx, [dirty]) {
 			if (dirty & /*number*/ 2) set_data(t4, /*number*/ ctx[1]);
+			if (dirty & /*clickHandler*/ 1) dispose[2].p();
 		},
 		i: noop,
 		o: noop,
