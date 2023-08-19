@@ -104,6 +104,7 @@ export default {
 		code: 'invalid-event-modifier',
 		message: `Valid event modifiers are ${valid}`
 	}),
+	/** @deprecated unused - to remove ? */
 	invalid_event_modifier_component: {
 		code: 'invalid-event-modifier',
 		message: "Event modifiers other than 'once' can only be used on DOM elements"
