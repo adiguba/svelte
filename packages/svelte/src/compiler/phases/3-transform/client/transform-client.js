@@ -340,7 +340,7 @@ export function client_component(source, analysis, options) {
 		b.export_default(
 			b.function_declaration(
 				b.id(analysis.name),
-				[b.id('$$anchor'), b.id('$$props')],
+				[b.id('$$anchor'), b.id('$$props'), b.id('$$nodeinit')],
 				component_block
 			)
 		)

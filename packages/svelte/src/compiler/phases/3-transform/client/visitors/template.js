@@ -742,6 +742,13 @@ function serialize_inline_component(node, component_name, context) {
 		}
 	}
 
+	/** @type {import('#compiler').ClassDirective[]} */
+	const class_directives = [];
+	/** @type {import('#compiler').StyleDirective[]} */
+	const style_directives = [];
+	/** @type {import('#compiler').Directive[]} */
+	const directives = [];
+
 	for (const attribute of node.attributes) {
 		if (attribute.type === 'LetDirective') {
 			default_lets.push(
@@ -826,6 +833,12 @@ function serialize_inline_component(node, component_name, context) {
 					])
 				);
 			}
+		} else if (attribute.type === 'ClassDirective') {
+			class_directives.push(attribute);
+		} else if (attribute.type === 'StyleDirective') {
+			style_directives.push(attribute);
+		} else {
+			directives.push(attribute);
 		}
 	}
 
@@ -916,6 +929,72 @@ function serialize_inline_component(node, component_name, context) {
 					'$.spread_props',
 					...props_and_spreads.map((p) => (Array.isArray(p) ? b.object(p) : p))
 			  );
+
+	//
+
+	/** @type {import('estree').ArrowFunctionExpression} */
+	let node_consumer;
+	if (directives.length > 0 || class_directives.length > 0) {
+		const main_node = b.id('$$main');
+		/** @type {import('../types').ComponentClientTransformState} */
+		const arrow_state = {
+			...context.state,
+			node: main_node,
+			init: [],
+			update_effects: [],
+			update: [],
+			after_update: []
+		}
+
+		const arrow_context = {
+			...context,
+			state: arrow_state
+		}
+
+		for (const directive of directives) {
+			context.visit(directive, arrow_state);
+		}
+
+		if (class_directives.length) {
+			serialize_class_directives(class_directives, main_node, arrow_context, true);
+		}
+		if (style_directives.length) {
+			serialize_style_directives(style_directives, main_node, arrow_context, true);
+		}
+		
+		/** @type {import('estree').Statement[]} */
+		const stmt = [];
+		stmt.push(b.stmt(b.call('console.log', b.literal("init"))));
+		if (arrow_state.init.length > 0) {
+			stmt.push(...arrow_state.init);
+		}
+		stmt.push(b.stmt(b.call('console.log', b.literal("update"))));
+		if (arrow_state.update.length > 0) {
+			/** @type {import('estree').Statement[]} */
+			const updates = [];
+			for (const u of arrow_state.update) {
+				if (u.init) {
+					stmt.push(u.init);
+				}
+				if (u.singular) {
+					updates.push(u.singular);
+				} else {
+					updates.push(u.grouped);
+				}
+			}
+			stmt.push(b.stmt(b.call('$.render_effect', b.arrow([], b.block(updates)))));
+		}
+		stmt.push(b.stmt(b.call('console.log', b.literal("update_effects"))));
+		if (arrow_state.update_effects.length > 0) {
+			stmt.push(...arrow_state.update_effects);
+		}
+		stmt.push(b.stmt(b.call('console.log', b.literal("after_update"))));
+		if (arrow_state.after_update.length > 0) {
+			stmt.push(...arrow_state.after_update);
+		}
+		node_consumer = b.arrow([main_node], b.block(stmt));
+	}
+
 	/** @param {import('estree').Identifier} node_id */
 	let fn = (node_id) =>
 		b.call(
@@ -923,7 +1002,8 @@ function serialize_inline_component(node, component_name, context) {
 				? b.call('$.validate_component', b.id(component_name))
 				: component_name,
 			node_id,
-			props_expression
+			props_expression,
+			node_consumer
 		);
 
 	if (bind_this !== null) {
@@ -2725,7 +2805,12 @@ export const template_visitors = {
 		// Bindings need to happen after attribute updates, therefore after the render effect, and in order with events/actions.
 		// bind:this is a special case as it's one-way and could influence the render effect.
 		if (node.name === 'this') {
-			state.init.push(b.stmt(call_expr));
+			if (node.expression.type === 'Identifier' && node.expression.name === 'this') {
+				const nodeinit = b.id('$$nodeinit');
+				state.after_update.push(b.stmt(b.logical('&&', nodeinit, b.call(nodeinit, state.node))));
+			} else {
+				state.init.push(b.stmt(call_expr)); 
+			}
 		} else {
 			state.after_update.push(b.stmt(call_expr));
 		}

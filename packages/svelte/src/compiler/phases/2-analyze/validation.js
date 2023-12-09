@@ -25,6 +25,7 @@ import { a11y_validators } from './a11y.js';
  */
 function validate_component(node, context) {
 	for (const attribute of node.attributes) {
+		/*
 		if (
 			attribute.type !== 'Attribute' &&
 			attribute.type !== 'SpreadAttribute' &&
@@ -33,7 +34,7 @@ function validate_component(node, context) {
 			attribute.type !== 'BindDirective'
 		) {
 			error(attribute, 'invalid-component-directive');
-		}
+		}*/
 
 		if (
 			attribute.type === 'OnDirective' &&
