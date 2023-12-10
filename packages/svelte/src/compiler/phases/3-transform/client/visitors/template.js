@@ -934,7 +934,7 @@ function serialize_inline_component(node, component_name, context) {
 
 	/** @type {import('estree').ArrowFunctionExpression} */
 	let node_consumer;
-	if (directives.length > 0 || class_directives.length > 0) {
+	if (directives.length > 0 || class_directives.length > 0 || style_directives.length > 0) {
 		const main_node = b.id('$$main');
 		/** @type {import('../types').ComponentClientTransformState} */
 		const arrow_state = {
@@ -964,11 +964,11 @@ function serialize_inline_component(node, component_name, context) {
 		
 		/** @type {import('estree').Statement[]} */
 		const stmt = [];
-		stmt.push(b.stmt(b.call('console.log', b.literal("init"))));
+		//stmt.push(b.stmt(b.call('console.log', b.literal("init"))));
 		if (arrow_state.init.length > 0) {
 			stmt.push(...arrow_state.init);
 		}
-		stmt.push(b.stmt(b.call('console.log', b.literal("update"))));
+		//stmt.push(b.stmt(b.call('console.log', b.literal("update"))));
 		if (arrow_state.update.length > 0) {
 			/** @type {import('estree').Statement[]} */
 			const updates = [];
@@ -984,11 +984,11 @@ function serialize_inline_component(node, component_name, context) {
 			}
 			stmt.push(b.stmt(b.call('$.render_effect', b.arrow([], b.block(updates)))));
 		}
-		stmt.push(b.stmt(b.call('console.log', b.literal("update_effects"))));
+		//stmt.push(b.stmt(b.call('console.log', b.literal("update_effects"))));
 		if (arrow_state.update_effects.length > 0) {
 			stmt.push(...arrow_state.update_effects);
 		}
-		stmt.push(b.stmt(b.call('console.log', b.literal("after_update"))));
+		//stmt.push(b.stmt(b.call('console.log', b.literal("after_update"))));
 		if (arrow_state.after_update.length > 0) {
 			stmt.push(...arrow_state.after_update);
 		}
