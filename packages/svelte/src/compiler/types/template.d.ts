@@ -240,6 +240,13 @@ interface TransitionDirective extends BaseNode {
 	intro: boolean;
 	/** True if this is a `transition:` or `out:` directive */
 	outro: boolean;
+
+	/** If an transition:this is present, transition will be ignored */
+	ignore?: boolean;
+	/** The in transition associated with transition:this */
+	in?: TransitionDirective;
+	/** The out transition associated with transition:this */
+	out?: TransitionDirective;
 }
 
 /** A `use:` directive */

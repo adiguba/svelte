@@ -526,6 +526,87 @@ export function bind_transition(dom, get_transition_fn, props_fn, direction, glo
 }
 
 /**
+ * @param {HTMLElement} dom
+ * @param {boolean} visible
+ */
+function bind_display(dom, visible) {
+	if (visible) {
+		dom.style.removeProperty('display');
+	} else {
+		dom.style.setProperty('display', 'none', 'important');
+	}
+}
+
+/**
+ * @template P
+ * @param {HTMLElement} dom
+ * @param {()=>any} get_visibility
+ * @param {boolean} global
+ * @param {(() => import('./types.js').TransitionFn<P | undefined> | import('./types.js').AnimateFn<P | undefined>) | null} get_in_fn
+ * @param {(() => P) | null} get_in_props
+ * @param {(() => import('./types.js').TransitionFn<P | undefined> | import('./types.js').AnimateFn<P | undefined>) | null} get_out_fn
+ * @param {(() => P) | null} get_out_props
+ * @returns {void}
+ */
+export function bind_transition_this(dom, get_visibility, global, get_in_fn, get_in_props, get_out_fn, get_out_props ) {
+
+	const transition_effect = /** @type {import('./types.js').EffectSignal} */ (current_effect);
+
+	/** @type {import('./types.js').Transition | undefined} */
+	let transition;
+
+	/** @type {boolean} */
+	let visibility;
+	if (global !== true) {
+		bind_display(dom, visibility = !!get_visibility());
+	}
+
+	effect(() => {
+		const new_visibility = !!get_visibility();
+		if (new_visibility !== visibility) {
+			visibility = new_visibility;
+			untrack(() => {
+				if (transition !== undefined) {
+					transition.c();
+					transition = undefined;
+				}
+	
+				const get_transition_fn = visibility ? get_in_fn : get_out_fn;
+				if (get_transition_fn) {
+					dom.style.removeProperty('display');
+					const get_props_fn = visibility ? get_in_props : get_out_props;
+					const direction = visibility ? 'in' : 'out';
+					const init = () => 
+						/** @type {import('./types.js').TransitionFn<any>} */ (get_transition_fn())(dom, get_props_fn?.(), {
+							direction
+						})
+					;
+	
+					transition = create_transition(dom, init, direction, transition_effect);
+					transition.p = transition.i();
+					if (visibility) {
+						transition.in();
+					} else {
+						const end_visibility = visibility;
+						transition.f(() => {
+							if (end_visibility === visibility) {
+								bind_display(dom, visibility);
+							}
+						});
+						transition.o();
+					}
+				} else {
+					bind_display(dom, visibility);
+				}
+			});
+		}
+	});
+
+}
+
+
+
+/**
  * @param {Set<import('./types.js').Transition>} transitions
  * @param {'in' | 'out' | 'key'} target_direction
  * @param {DOMRect} [from]

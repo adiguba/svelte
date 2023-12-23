@@ -55,9 +55,16 @@ function validate_component(node, context) {
  * @param {import('zimmerframe').Context<import('#compiler').SvelteNode, import('./types.js').AnalysisState>} context
  */
 function validate_element(node, context) {
+	/** @type {import('../../types/template.js').TransitionDirective | null} */
+	let in_transition = null;
+	/** @type {import('../../types/template.js').TransitionDirective | null} */
+	let out_transition = null;
+	/** @type {import('../../types/template.js').TransitionDirective | null} */
+	let this_transition = null;
+	
 	let has_animate_directive = false;
-	let has_in_transition = false;
-	let has_out_transition = false;
+	//let has_in_transition = false;
+	//let has_out_transition = false;
 
 	for (const attribute of node.attributes) {
 		if (attribute.type === 'Attribute') {
@@ -106,19 +113,41 @@ function validate_element(node, context) {
 				has_animate_directive = true;
 			}
 		} else if (attribute.type === 'TransitionDirective') {
-			if ((attribute.outro && has_out_transition) || (attribute.intro && has_in_transition)) {
-				/** @param {boolean} _in @param {boolean} _out */
-				const type = (_in, _out) => (_in && _out ? 'transition' : _in ? 'in' : 'out');
-				error(
-					attribute,
-					'duplicate-transition',
-					type(has_in_transition, has_out_transition),
-					type(attribute.intro, attribute.outro)
-				);
-			}
+			if (attribute.name === 'this') {
+				if (this_transition) {
+					error(
+						attribute,
+						'TODO',
+						'Duplicate transition:this'
+					);
+				} else if (attribute.expression == null) {
+					error(
+						attribute,
+						'TODO',
+						'Value required'
+					);
+				} else {
+					this_transition = attribute;
+				}
+			} else {
+				if ((attribute.outro && out_transition) || (attribute.intro && in_transition)) {
+					/** @param {any} _in @param {any} _out */
+					const type = (_in, _out) => (_in && _out ? 'transition' : _in ? 'in' : 'out');
+					error(
+						attribute,
+						'duplicate-transition',
+						type(in_transition, out_transition),
+						type(attribute.intro, attribute.outro)
+					);
+				}
 
-			has_in_transition = has_in_transition || attribute.intro;
-			has_out_transition = has_out_transition || attribute.outro;
+				if (attribute.intro) {
+					in_transition = attribute;
+				}
+				if (attribute.outro) {
+					out_transition = attribute;
+				}
+			}
 		} else if (attribute.type === 'OnDirective') {
 			let has_passive_modifier = false;
 			let conflicting_passive_modifier = '';
@@ -140,6 +169,18 @@ function validate_element(node, context) {
 					);
 				}
 			}
+		}
+	}
+
+
+	if (this_transition) {
+		if (in_transition) {
+			in_transition.ignore = true;
+			this_transition.in = in_transition;
+		}
+		if (out_transition) {
+			out_transition.ignore = true;
+			this_transition.out = out_transition;
 		}
 	}
 }

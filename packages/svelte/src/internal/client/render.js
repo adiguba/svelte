@@ -56,7 +56,7 @@ import {
 	object_keys
 } from './utils.js';
 import { is_promise } from '../common.js';
-import { bind_transition, trigger_transitions } from './transitions.js';
+import { bind_transition, bind_transition_this, trigger_transitions } from './transitions.js';
 import { proxy } from './proxy/proxy.js';
 
 /** @type {Set<string>} */
@@ -2093,6 +2093,21 @@ export function html(dom, get_value, svg) {
  */
 export function transition(dom, get_transition_fn, props, global = false) {
 	bind_transition(dom, get_transition_fn, props, 'both', global);
+}
+
+/**
+ * @template P
+ * @param {HTMLElement} dom
+ * @param {()=>any} get_visibility
+ * @param {any} global
+ * @param {(() => import('./types.js').TransitionFn<P | undefined>) | null} get_in_fn
+ * @param {(() => P) | null} get_in_props
+ * @param {(() => import('./types.js').TransitionFn<P | undefined>) | null} get_out_fn
+ * @param {(() => P) | null} get_out_props
+ * @returns {void}
+ */
+export function transition_this(dom, get_visibility, global, get_in_fn, get_in_props, get_out_fn = get_in_fn, get_out_props = get_in_props) {
+	bind_transition_this(dom, get_visibility, global, get_in_fn, get_in_props, get_out_fn, get_out_props);
 }
 
 /**

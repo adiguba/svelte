@@ -1782,6 +1782,48 @@ export const template_visitors = {
 		error(node, 'INTERNAL', 'Node should have been handled elsewhere');
 	},
 	TransitionDirective(node, { state, visit }) {
+		if (node.ignore === true) {
+			// ignore, handled via transition:this
+			return; // ignore
+		}
+		if (node.name === 'this' && node.intro && node.outro) {
+			if (!node.expression) {
+				throw new Error("should not happen");
+			}
+			/** @type {import('estree').Expression[]} */
+			const args = [state.node,
+				b.thunk(
+					/** @type {import('estree').Expression} */ (visit(node.expression))
+				),
+				node.modifiers.includes('global') ? b.true : b.false];
+			if (node.in) {
+				args.push(b.thunk(
+					/** @type {import('estree').Expression} */ (visit(parse_directive_name(node.in.name)))
+				));
+				args.push(node.in.expression === null
+					? b.literal(null)
+					: b.thunk(/** @type {import('estree').Expression} */ (visit(node.in.expression))));
+			} else {
+				args.push(b.literal(null), b.literal(null));
+			}
+			if (node.out !== node.in) {
+				if (node.out) {
+					args.push(b.thunk(
+						/** @type {import('estree').Expression} */ (visit(parse_directive_name(node.out.name)))
+					));
+					args.push(node.out.expression === null
+						? b.literal(null)
+						: b.thunk(/** @type {import('estree').Expression} */ (visit(node.out.expression))));
+				} else {
+					args.push(b.literal(null), b.literal(null));
+				}
+			} 
+			state.init.push(
+				b.stmt(b.call('$.transition_this', ...args))
+			);
+			return;
+		}
+		
 		const type = node.intro && node.outro ? '$.transition' : node.intro ? '$.in' : '$.out';
 		const expression =
 			node.expression === null
