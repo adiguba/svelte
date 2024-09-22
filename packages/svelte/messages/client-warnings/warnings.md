@@ -32,6 +32,10 @@
 
 > Tried to unmount a component that was not mounted
 
+## on_directive_on_svelte5_component
+
+> Using of the directive `on:%event_name%` on the `%component_name%` component might not work. You should probably use `on%event_name%` instead.
+
 ## ownership_invalid_binding
 
 > %parent% passed a value to %child% with `bind:`, but the value is owned by %owner%. Consider creating a binding between %owner% and %parent%

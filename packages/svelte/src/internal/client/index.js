@@ -9,7 +9,7 @@ export {
 	add_owner_effect,
 	skip_ownership_validation
 } from './dev/ownership.js';
-export { check_target, legacy_api } from './dev/legacy.js';
+export { check_target, check_events, legacy_api } from './dev/legacy.js';
 export { inspect } from './dev/inspect.js';
 export { await_block as await } from './dom/blocks/await.js';
 export { if_block as if } from './dom/blocks/if.js';

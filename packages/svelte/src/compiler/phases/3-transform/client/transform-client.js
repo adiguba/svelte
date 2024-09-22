@@ -551,6 +551,11 @@ export function client_component(analysis, options) {
 		);
 	} else if (dev) {
 		component_block.body.unshift(b.stmt(b.call('$.check_target', b.id('new.target'))));
+		if (analysis.runes || options.runes) {
+			component_block.body.unshift(
+				b.stmt(b.call('$.check_events', b.id('$$props'), b.literal(analysis.name)))
+			);
+		}
 	}
 
 	if (state.events.size > 0) {

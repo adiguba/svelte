@@ -99,6 +99,20 @@ export function lifecycle_double_unmount() {
 }
 
 /**
+ * Using of the directive `on:%event_name%` on the `%component_name%` component might not work. You should probably use `on%event_name%` instead.
+ * @param {string} event_name
+ * @param {string} component_name
+ */
+export function on_directive_on_svelte5_component(event_name, component_name) {
+	if (DEV) {
+		console.warn(`%c[svelte] on_directive_on_svelte5_component\n%cUsing of the directive \`on:${event_name}\` on the \`${component_name}\` component might not work. You should probably use \`on${event_name}\` instead.`, bold, normal);
+	} else {
+		// TODO print a link to the documentation
+		console.warn("on_directive_on_svelte5_component");
+	}
+}
+
+/**
  * %parent% passed a value to %child% with `bind:`, but the value is owned by %owner%. Consider creating a binding between %owner% and %parent%
  * @param {string} parent
  * @param {string} child
