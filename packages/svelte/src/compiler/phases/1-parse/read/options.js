@@ -34,6 +34,10 @@ export default function read_options(node) {
 				component_options.runes = get_boolean_value(attribute);
 				break;
 			}
+			case 'legacyEvents': {
+				component_options.legacyEvents = get_boolean_value(attribute);
+				break;
+			}
 			case 'tag': {
 				e.svelte_options_deprecated_tag(attribute);
 				break; // eslint doesn't know this is unnecessary

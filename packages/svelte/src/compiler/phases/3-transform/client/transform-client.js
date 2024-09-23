@@ -408,6 +408,12 @@ export function client_component(analysis, options) {
 		);
 	}
 
+	if (options.legacyEvents !== undefined) {
+		component_block.body.unshift(
+			b.stmt(b.call('$.legacy_events', b.id('$$props'), b.literal(options.legacyEvents)))
+		);
+	}
+
 	if (analysis.uses_rest_props) {
 		const named_props = analysis.exports.map(({ name, alias }) => alias ?? name);
 		for (const [name, binding] of analysis.instance.scope.declarations) {

@@ -53,3 +53,70 @@ function observe_all(context) {
 
 	deep_read_state(context.s);
 }
+
+/**
+ * Function to mimic the multiple listeners available in svelte 4
+ * @deprecated
+ * @param {EventListener[]} handlers
+ * @returns {EventListener}
+ */
+export function handlers(...handlers) {
+	return function (event) {
+		const { stopImmediatePropagation } = event;
+		let stopped = false;
+
+		event.stopImmediatePropagation = () => {
+			stopped = true;
+			stopImmediatePropagation.call(event);
+		};
+
+		const errors = [];
+
+		for (const handler of handlers) {
+			try {
+				// @ts-expect-error `this` is not typed
+				handler?.call(this, event);
+			} catch (e) {
+				errors.push(e);
+			}
+
+			if (stopped) {
+				break;
+			}
+		}
+
+		for (let error of errors) {
+			queueMicrotask(() => {
+				throw error;
+			});
+		}
+	};
+}
+/**
+ * Put the old on:event directive into the Svelte 5's props
+ * @deprecated
+ * @param {Record<string, any>} props
+ * @param {boolean} enabled
+ */
+export function legacy_events(props, enabled) {
+	if (props?.$$events) {
+		for (const event_name of Object.getOwnPropertyNames(props.$$events)) {
+			const prop_name = 'on' + event_name;
+			if (!enabled) {
+				throw new Error(`Cannot use on:${event_name} on this component.`);
+			}
+			const has_prop = prop_name in props;
+			if (has_prop) {
+				throw new Error(`Cannot use both on:${event_name} and ${prop_name}.`);
+			}
+
+			/** @type {Function | Array<EventListener>} */
+			let event = props.$$events[event_name];
+			if (typeof event === 'function') {
+				props[prop_name] = event;
+			} else {
+				props[prop_name] = handlers(...event);
+			}
+		}
+	}
+}

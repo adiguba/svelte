@@ -238,6 +238,7 @@ export type ValidatedCompileOptions = ValidatedModuleCompileOptions &
 		sourcemap: CompileOptions['sourcemap'];
 		compatibility: Required<Required<CompileOptions>['compatibility']>;
 		runes: CompileOptions['runes'];
+		legacyEvents: AST.SvelteOptions['legacyEvents'];
 		customElementOptions: AST.SvelteOptions['customElement'];
 		hmr: CompileOptions['hmr'];
 	};

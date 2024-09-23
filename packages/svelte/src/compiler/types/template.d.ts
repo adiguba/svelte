@@ -85,6 +85,7 @@ export namespace AST {
 		end: number;
 		// options
 		runes?: boolean;
+		legacyEvents?: boolean;
 		immutable?: boolean;
 		accessors?: boolean;
 		preserveWhitespace?: boolean;

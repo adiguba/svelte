@@ -75,7 +75,7 @@ export {
 	stopPropagation,
 	trusted
 } from './dom/legacy/event-modifiers.js';
-export { init } from './dom/legacy/lifecycle.js';
+export { init, legacy_events } from './dom/legacy/lifecycle.js';
 export {
 	add_legacy_event_listener,
 	bubble_event,
