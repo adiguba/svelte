@@ -79,6 +79,10 @@ export function SnippetBlock(node, context) {
 		snippet = b.call('$.wrap_snippet', b.id(context.state.analysis.name), snippet);
 	}
 
+	if (node.test) {
+		snippet = b.conditional(node.test, snippet, b.id('undefined'));
+	}
+
 	const declaration = b.const(node.expression, snippet);
 
 	// Top-level snippets are hoisted so they can be referenced in the `<script>`

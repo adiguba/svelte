@@ -8,11 +8,21 @@ import * as b from '../../../../utils/builders.js';
  * @param {ComponentContext} context
  */
 export function SnippetBlock(node, context) {
-	const fn = b.function_declaration(
-		node.expression,
-		[b.id('$$payload'), ...node.parameters],
-		/** @type {BlockStatement} */ (context.visit(node.body))
-	);
+	let fn;
+	if (node.test) {
+		const arrow = b.arrow(
+			[b.id('$$payload'), ...node.parameters],
+			/** @type {BlockStatement} */ (context.visit(node.body))
+		);
+
+		fn = b.const(node.expression, b.conditional(node.test, arrow, b.id('undefined')));
+	} else {
+		fn = b.function_declaration(
+			node.expression,
+			[b.id('$$payload'), ...node.parameters],
+			/** @type {BlockStatement} */ (context.visit(node.body))
+		);
+	}
 
 	// @ts-expect-error - TODO remove this hack once $$render_inner for legacy bindings is gone
 	fn.___snippet = true;

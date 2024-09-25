@@ -301,6 +301,14 @@ function open(parser) {
 		);
 
 		parser.allow_whitespace();
+
+		let test = null;
+		if (parser.eat('if')) {
+			parser.require_whitespace();
+			test = read_expression(parser);
+			parser.allow_whitespace();
+		}
+
 		parser.eat('}', true);
 
 		/** @type {ReturnType<typeof parser.append<AST.SnippetBlock>>} */
@@ -315,7 +323,8 @@ function open(parser) {
 				name
 			},
 			parameters: function_expression.params,
-			body: create_fragment()
+			body: create_fragment(),
+			test
 		});
 		parser.stack.push(block);
 		parser.fragments.push(block.body);

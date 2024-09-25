@@ -437,6 +437,7 @@ export namespace AST {
 		expression: Identifier;
 		parameters: Pattern[];
 		body: Fragment;
+		test: Expression | null;
 	}
 
 	export interface Attribute extends BaseNode {
