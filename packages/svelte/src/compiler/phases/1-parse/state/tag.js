@@ -300,15 +300,15 @@ function open(parser) {
 			parse_expression_at(prelude + `${params} => {}`, parser.ts, params_start)
 		);
 
-		parser.allow_whitespace();
-
 		let test = null;
-		if (parser.eat('if')) {
+		if (parser.match_regex(regex_whitespace_with_closing_curly_brace) === null) {
+			parser.require_whitespace();
+			parser.eat('if', true);
 			parser.require_whitespace();
 			test = read_expression(parser);
-			parser.allow_whitespace();
 		}
 
+		parser.allow_whitespace();
 		parser.eat('}', true);
 
 		/** @type {ReturnType<typeof parser.append<AST.SnippetBlock>>} */

@@ -227,7 +227,13 @@ export function build_component(node, component_name, context, anchor = context.
 				init: snippet_declarations
 			});
 
-			push_prop(b.prop('init', child.expression, child.expression));
+			let value = /** @type {Expression} */ (context.visit(child.expression, context.state));
+			if (child.test && /** @type {Expression} */ (context.visit(child.test, context.state)).type === 'CallExpression') {
+				push_prop(b.get(child.expression.name, [b.return(b.call('$.get', value))]));
+			} else {
+				push_prop(b.prop('init', child.expression, child.expression));
+			}
+			
 
 			continue;
 		}

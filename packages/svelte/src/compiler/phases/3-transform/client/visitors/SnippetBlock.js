@@ -80,7 +80,11 @@ export function SnippetBlock(node, context) {
 	}
 
 	if (node.test) {
-		snippet = b.conditional(node.test, snippet, b.id('undefined'));
+		const test = /** @type {Expression} */ (context.visit(node.test, child_state));
+		snippet = b.conditional(test, snippet, b.id('undefined'))
+		if (test.type === 'CallExpression') {
+			snippet = b.call('$.derived', b.arrow([], snippet));
+		}
 	}
 
 	const declaration = b.const(node.expression, snippet);
