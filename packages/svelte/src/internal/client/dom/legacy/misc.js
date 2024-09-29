@@ -1,7 +1,6 @@
 import { set, source } from '../../reactivity/sources.js';
 import { get } from '../../runtime.js';
 import { is_array } from '../../../shared/utils.js';
-import { dev } from '../../../../compiler/state.js';
 import { invalid_default_snippet } from '../../../shared/errors.js';
 
 /**
@@ -145,10 +144,7 @@ function legacy_slots($$props, metadata) {
 				throw new Error(`Conflict between slot="${name}" and prop '${prop}'`);
 			}
 		}
-
-		if (dev) {
-			// TODO : warning
-		}
+		// TODO : warning ???
 		
 		const slot = $$props.$$slots[name];
 		// @ts-ignore
