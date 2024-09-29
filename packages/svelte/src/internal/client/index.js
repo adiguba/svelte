@@ -81,7 +81,8 @@ export {
 	bubble_event,
 	reactive_import,
 	update_legacy_props,
-	default_slot
+	default_slot,
+	legacy
 } from './dom/legacy/misc.js';
 export {
 	append,

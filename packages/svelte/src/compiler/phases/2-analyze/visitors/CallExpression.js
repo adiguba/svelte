@@ -141,6 +141,13 @@ export function CallExpression(node, context) {
 			}
 
 			break;
+		case '$legacy':
+			if (node.arguments.length !== 1) {
+				e.rune_invalid_arguments_length(node, rune, 'exactly one argument');
+			}
+			// TODO : more check ?
+			context.state.analysis.legacy_rune = node.arguments[0];
+			break;
 	}
 
 	if (context.state.render_tag) {

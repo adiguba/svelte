@@ -410,7 +410,8 @@ export function analyze_component(root, source, options) {
 				: '',
 			keyframes: []
 		},
-		source
+		source,
+		legacy_rune: null
 	};
 
 	if (!runes) {
