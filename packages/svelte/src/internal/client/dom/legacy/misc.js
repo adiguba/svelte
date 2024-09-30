@@ -2,6 +2,7 @@ import { set, source } from '../../reactivity/sources.js';
 import { get } from '../../runtime.js';
 import { is_array } from '../../../shared/utils.js';
 import { invalid_default_snippet } from '../../../shared/errors.js';
+import { handlers } from 'svelte/legacy';
 
 /**
  * Under some circumstances, imports may be reactive in legacy mode. In that case,
@@ -87,7 +88,20 @@ export function default_slot($$props) {
 function throw_error_on_slots($$slots) {
 	if ($$slots) {
 		for (const name of Object.getOwnPropertyNames($$slots)) {
-			throw new Error(`Illegal slot "${name}"`);
+			if (name !== 'default') {
+				throw new Error(`Illegal slot "${name}"`);
+			}
+		}
+	}
+}
+
+/**
+ * @param {Record<string, any>} $$events
+ */
+function throw_error_on_events($$events) {
+	if ($$events) {
+		for (const name of Object.getOwnPropertyNames($$events)) {
+			throw new Error(`Illegal directive "on:${name}"`);
 		}
 	}
 }
@@ -99,69 +113,109 @@ function throw_error_on_slots($$slots) {
 function legacy_slots($$props, metadata) {
 	for (const name of Object.getOwnPropertyNames($$props.$$slots)) {
 
+		const is_default = name === 'default';
 
-		if (name === 'default' && typeof $$props.$$slots[name] !== 'function') {
+		if (is_default && $$props.$$slots[name] === true) {
 			continue;
 		}
-
 
 		const meta = metadata[name] ?? false;
 
 		/** @type {string} */
-		let prop = name === 'default' ? 'children' : name;
+		let prop = is_default ? 'children' : name;
 		/** @type {string[] | null} */
-		let args = name === 'default' ? [] : null;
-		switch (typeof meta) {
-		case 'boolean':
-			if (meta) {
-				args = [];
-			}
-			break;
-		case 'string':
-			prop = meta;
+		let args = null;
+
+		if (meta === true) {
 			args = [];
-			break;
-		case 'object':
-			if (Array.isArray(meta)) {
-				args = meta;
-			} else {
-				prop = meta.prop;
-				args = meta.args;
+		} else if (meta !== false) {
+			switch (typeof meta) {
+			case 'string':
+				prop = meta;
+				args = [];
+				break;
+			case 'object':
+				if (Array.isArray(meta)) {
+					args = meta;
+				} else {
+					prop = meta.prop;
+					args = meta.args;
+				}
 			}
 		}
-
 
 		if (args == null) {
 			// no args : slot is invalid
 			throw new Error(`Invalid slot="${name}"`);
 		}
 
-		if (prop in $$props) {
-			if (name === 'default' && $$props['children'] === invalid_default_snippet) {
-				// ok ?
-			} else {
-				// Conflict between slot and prop
-				throw new Error(`Conflict between slot="${name}" and prop '${prop}'`);
-			}
+		if (!is_default && prop in $$props) {
+			// Conflict between slot and prop
+			throw new Error(`Conflict between slot="${name}" and prop '${prop}'`);
 		}
 		// TODO : warning ???
 		
 		const slot = $$props.$$slots[name];
-		// @ts-ignore
-		$$props[prop] = ($$anchor, ...params) => {
-			/** @type {Record<string,any>} */
-			const slot_props = {};
-			args.forEach( (n, i) => {
-				const get = params[i];
-				if (get) {
-					Object.defineProperty(slot_props, n, { get });
-				}
-			});
-			slot($$anchor, slot_props);
-		};
 
+		if (args.length === 0) {
+			// @ts-ignore
+			$$props[prop] = ($$anchor) => slot($$anchor, {});
+		} else {
+			// @ts-ignore
+			$$props[prop] = ($$anchor, ...params) => {
+				/** @type {Record<string,any>} */
+				const slot_props = {};
+				args.forEach( (name, index) => {
+					if (name) {
+						const get = params[index];
+						if (name && get) {
+							Object.defineProperty(slot_props, name, { get });
+						}
+					}
+				});
+				slot($$anchor, slot_props);
+			};
+		}
 	}
-	
+}
+
+/**
+ * @param {Record<string, any>} $$props
+ * @param {Record<string, (boolean | string)>} metadata
+ */
+function legacy_events($$props, metadata) {	
+	for (const name of Object.getOwnPropertyNames($$props.$$events)) {
+		const meta = metadata[name] ?? false;
+
+		let prop = null;
+		if (meta === true) {
+			prop = 'on' + name;
+		} else if (meta !== false) {
+			switch (typeof meta) {
+			case 'string':
+				prop = meta;
+				break;
+			}
+		}
+
+		if (prop == null) {
+			// event is invalid
+			throw new Error(`Invalid directive "on:${name}"`);
+		}
+
+		if (prop in $$props) {
+			// Conflict between slot and prop
+			throw new Error(`Conflict between directive "on:${name}" and prop '${prop}'`);
+		}
+
+		const fn = $$props.$$events[name];
+		if (typeof fn === 'function') {
+			$$props[prop] = fn;
+		} else {
+			$$props[prop] = handlers(...fn);
+		}
+		
+	}
 }
 
 /**
@@ -174,6 +228,13 @@ export function legacy($$props, metadata) {
 			throw_error_on_slots($$props.$$slots);
 		} else if (metadata.slots) {
 			legacy_slots($$props, metadata.slots);
+		}
+	}
+	if ($$props.$$events) {
+		if (metadata === false || metadata.events === false) {
+			throw_error_on_events($$props.$$events);
+		} else if (metadata.slots) {
+			legacy_events($$props, metadata.events);
 		}
 	}
 }
