@@ -1,8 +1,7 @@
 import { set, source } from '../../reactivity/sources.js';
 import { get } from '../../runtime.js';
 import { is_array } from '../../../shared/utils.js';
-import { invalid_default_snippet } from '../../../shared/errors.js';
-import { handlers } from 'svelte/legacy';
+import { handlers } from './event-modifiers.js';
 
 /**
  * Under some circumstances, imports may be reactive in legacy mode. In that case,

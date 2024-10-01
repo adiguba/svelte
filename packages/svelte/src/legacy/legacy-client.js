@@ -173,45 +173,6 @@ export function run(fn) {
 }
 
 /**
- * Function to mimic the multiple listeners available in svelte 4
- * @deprecated
- * @param {EventListener[]} handlers
- * @returns {EventListener}
- */
-export function handlers(...handlers) {
-	return function (event) {
-		const { stopImmediatePropagation } = event;
-		let stopped = false;
-
-		event.stopImmediatePropagation = () => {
-			stopped = true;
-			stopImmediatePropagation.call(event);
-		};
-
-		const errors = [];
-
-		for (const handler of handlers) {
-			try {
-				// @ts-expect-error `this` is not typed
-				handler?.call(this, event);
-			} catch (e) {
-				errors.push(e);
-			}
-
-			if (stopped) {
-				break;
-			}
-		}
-
-		for (let error of errors) {
-			queueMicrotask(() => {
-				throw error;
-			});
-		}
-	};
-}
-
-/**
  * Function to create a `bubble` function that mimic the behavior of `on:click` without handler available in svelte 4.
  * @deprecated Use this only as a temporary solution to migrate your automatically delegated events in Svelte 5.
  */
@@ -245,5 +206,6 @@ export {
 	stopPropagation,
 	trusted,
 	passive,
-	nonpassive
+	nonpassive,
+	handlers
 } from '../internal/client/dom/legacy/event-modifiers.js';

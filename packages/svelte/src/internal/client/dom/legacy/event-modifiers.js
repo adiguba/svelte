@@ -126,3 +126,42 @@ export function nonpassive(node, [event, handler]) {
 		});
 	});
 }
+
+/**
+ * Function to mimic the multiple listeners available in svelte 4
+ * @deprecated
+ * @param {EventListener[]} handlers
+ * @returns {EventListener}
+ */
+export function handlers(...handlers) {
+	return function (event) {
+		const { stopImmediatePropagation } = event;
+		let stopped = false;
+
+		event.stopImmediatePropagation = () => {
+			stopped = true;
+			stopImmediatePropagation.call(event);
+		};
+
+		const errors = [];
+
+		for (const handler of handlers) {
+			try {
+				// @ts-expect-error `this` is not typed
+				handler?.call(this, event);
+			} catch (e) {
+				errors.push(e);
+			}
+
+			if (stopped) {
+				break;
+			}
+		}
+
+		for (let error of errors) {
+			queueMicrotask(() => {
+				throw error;
+			});
+		}
+	};
+}
