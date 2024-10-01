@@ -107,7 +107,7 @@ function throw_error_on_events($$events) {
 
 /**
  * @param {Record<string, any>} $$props
- * @param {Record<string, (boolean | string | string[] | {prop: string, args: string[]})>} metadata
+ * @param {Record<string, (boolean | 0 | 1 | string | string[] | {prop: string, args: string[]})>} metadata
  */
 function legacy_slots($$props, metadata) {
 	for (const name of Object.getOwnPropertyNames($$props.$$slots)) {
@@ -125,9 +125,9 @@ function legacy_slots($$props, metadata) {
 		/** @type {string[] | null} */
 		let args = null;
 
-		if (meta === true) {
+		if (meta === true || meta === 1) {
 			args = [];
-		} else if (meta !== false) {
+		} else if (meta !== false && meta !== 0) {
 			switch (typeof meta) {
 			case 'string':
 				prop = meta;
@@ -180,15 +180,15 @@ function legacy_slots($$props, metadata) {
 
 /**
  * Return the translated name of the event
- * @param {boolean | string} meta 
+ * @param {boolean | 0 | 1 | string} meta 
  * @param {string} name 
  * @return {string | null}
  */
 function get_event_prop_name(meta, name) {
 	let prop = null;
-	if (meta === true) {
+	if (meta === true || meta === 1) {
 		prop = 'on' + name;
-	} else if (meta !== false) {
+	} else if (meta !== false && meta !== 0) {
 		switch (typeof meta) {
 		case 'string':
 			prop = meta;
