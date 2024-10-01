@@ -181,9 +181,10 @@ function legacy_slots($$props, metadata) {
 /**
  * Return the translated name of the event
  * @param {boolean | string} meta 
+ * @param {string} name 
  * @return {string | null}
  */
-function get_event_prop_name(meta) {
+function get_event_prop_name(meta, name) {
 	let prop = null;
 	if (meta === true) {
 		prop = 'on' + name;
@@ -204,7 +205,7 @@ function get_event_prop_name(meta) {
 function legacy_events($$props, metadata) {	
 	for (const name of Object.getOwnPropertyNames($$props.$$events)) {
 		const meta = metadata[name] ?? false;
-		const prop = get_event_prop_name(meta);
+		const prop = get_event_prop_name(meta, name);
 
 		if (prop == null) {
 			// event is invalid
