@@ -612,7 +612,10 @@ export function client_component(analysis, options) {
 		}
 	}
 
-	if (analysis.legacy_rune) {
+	const svelte4_legacy_support = analysis.module.scope.declarations.get('svelte4_compatibility');
+	if (svelte4_legacy_support) {
+		component_block.body.unshift(b.stmt(b.call('$.legacy', b.id('$$props'), b.id('svelte4_compatibility'))));
+	} else if (analysis.legacy_rune) {
 		component_block.body.unshift(b.stmt(b.call('$.legacy', b.id('$$props'), analysis.legacy_rune)));
 	}
 
