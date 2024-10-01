@@ -179,23 +179,32 @@ function legacy_slots($$props, metadata) {
 }
 
 /**
+ * Return the translated name of the event
+ * @param {boolean | string} meta 
+ * @return {string | null}
+ */
+function get_event_prop_name(meta) {
+	let prop = null;
+	if (meta === true) {
+		prop = 'on' + name;
+	} else if (meta !== false) {
+		switch (typeof meta) {
+		case 'string':
+			prop = meta;
+			break;
+		}
+	}
+	return prop;
+}
+
+/**
  * @param {Record<string, any>} $$props
  * @param {Record<string, (boolean | string)>} metadata
  */
 function legacy_events($$props, metadata) {	
 	for (const name of Object.getOwnPropertyNames($$props.$$events)) {
 		const meta = metadata[name] ?? false;
-
-		let prop = null;
-		if (meta === true) {
-			prop = 'on' + name;
-		} else if (meta !== false) {
-			switch (typeof meta) {
-			case 'string':
-				prop = meta;
-				break;
-			}
-		}
+		const prop = get_event_prop_name(meta);
 
 		if (prop == null) {
 			// event is invalid
@@ -213,7 +222,6 @@ function legacy_events($$props, metadata) {
 		} else {
 			$$props[prop] = handlers(...fn);
 		}
-		
 	}
 }
 
@@ -222,18 +230,37 @@ function legacy_events($$props, metadata) {
  * @param {false | { slots?: any, events?: any}} metadata
  */
 export function legacy($$props, metadata) {
-	if ($$props.$$slots) {
-		if (metadata === false || metadata.slots === false) {
-			throw_error_on_slots($$props.$$slots);
-		} else if (metadata.slots) {
-			legacy_slots($$props, metadata.slots);
+	if (metadata === false) {
+		throw_error_on_slots($$props.$$slots);
+		throw_error_on_events($$props.$$events);
+	} else {
+		if ($$props.$$slots) {
+			if (metadata.slots === false) {
+				throw_error_on_slots($$props.$$slots);
+			} else if (metadata.slots) {
+				legacy_slots($$props, metadata.slots);
+			}
+		}
+
+		if ($$props.$$events) {
+			if (metadata.events === false) {
+				throw_error_on_events($$props.$$events);
+			} else if (metadata.events) {
+				legacy_events($$props, metadata.events);
+			}
 		}
 	}
-	if ($$props.$$events) {
-		if (metadata === false || metadata.events === false) {
-			throw_error_on_events($$props.$$events);
-		} else if (metadata.slots) {
-			legacy_events($$props, metadata.events);
-		}
+
+	let event_names = null;
+	if (metadata === false || metadata.events === false) {
+		event_names = {};
+	} else {
+		event_names = metadata.events;
+	}
+
+	// Event's names are stored in $$events, for createEventDispatcher()
+	if (event_names != null) {
+		$$props.$$events = $$props.$$events || {};
+		$$props.$$events.$$event_names = event_names;
 	}
 }

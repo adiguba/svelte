@@ -91,6 +91,33 @@ export function createEventDispatcher() {
 	if (active_component_context === null) {
 		lifecycle_outside_component('createEventDispatcher');
 	}
+	
+	/** @type {Record<string,(boolean | string)> | undefined} */
+	const $$event_names = /** @type {Record<string, any>} */ (
+		active_component_context.s.$$events
+	)?.$$event_names;
+	if ($$event_names) {
+		return (type, detail, options) => {
+			const meta = $$event_names[/** @type {string} */(type)];
+			let prop = null;
+			if (meta) {
+				if (meta === true) {
+					prop = 'on' + type.toString();
+				} else {
+					prop = meta;
+				}
+			}
+			if (prop == null) {
+				throw new Error(`Unknown event "${type.toString()}"`)
+			}
+			const fn = /** @type {Function} */ (active_component_context.s[prop]);
+			if (fn) {
+				const event = create_custom_event(/** @type {string} */ (type), detail, options);
+				fn.call(active_component_context.x, event);
+			}
+			return true;
+		};
+	}
 
 	return (type, detail, options) => {
 		const events = /** @type {Record<string, Function | Function[]>} */ (
