@@ -9,7 +9,15 @@ import { mark_subtree_dynamic } from './shared/fragment.js';
  * @param {Context} context
  */
 export function StyleDirective(node, context) {
-	if (node.modifiers.length > 1 || (node.modifiers.length && node.modifiers[0] !== 'important')) {
+	if (node.name === 'display' && node.modifiers.length === 1 && node.modifiers[0] === 'if') {
+		const parent = context.path.at(-1);
+		if (parent?.type === 'SvelteElement' || parent?.type === 'RegularElement') {
+			context.state.analysis.style_display_if = true;
+		}
+	} else if (
+		node.modifiers.length > 1 ||
+		(node.modifiers.length && node.modifiers[0] !== 'important')
+	) {
 		e.style_directive_invalid_modifier(node);
 	}
 

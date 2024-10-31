@@ -118,15 +118,22 @@ export function build_style_directives(
 			value = b.call('$.get', id);
 		}
 
-		const update = b.stmt(
-			b.call(
+		/** @type {Expression} */
+		let expression;
+
+		if (directive.name === 'display' && directive.modifiers.includes('if')) {
+			expression = b.call('$.set_display', element_id, value);
+		} else {
+			expression = b.call(
 				'$.set_style',
 				element_id,
 				b.literal(directive.name),
 				value,
 				/** @type {Expression} */ (directive.modifiers.includes('important') ? b.true : undefined)
-			)
-		);
+			);
+		}
+
+		const update = b.stmt(expression);
 
 		if (!is_attributes_reactive && has_call) {
 			state.init.push(build_update(update));

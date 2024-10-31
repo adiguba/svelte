@@ -312,14 +312,16 @@ function build_element_spread_attributes(
 	}
 
 	if (style_directives.length > 0) {
-		const properties = style_directives.map((directive) =>
-			b.init(
-				directive.name,
+		const properties = style_directives.map((directive) => {
+			let value =
 				directive.value === true
 					? b.id(directive.name)
-					: build_attribute_value(directive.value, context, true)
-			)
-		);
+					: build_attribute_value(directive.value, context, true);
+			if (directive.name === 'display' && directive.modifiers.includes('if')) {
+				value = b.conditional(value, b.null, b.literal('none !important'));
+			}
+			return b.init(directive.name, value);
+		});
 
 		styles = b.object(properties);
 	}
@@ -411,7 +413,9 @@ function build_style_directives(style_directives, style_attribute, context) {
 			directive.value === true
 				? b.id(directive.name)
 				: build_attribute_value(directive.value, context, true);
-		if (directive.modifiers.includes('important')) {
+		if (directive.name === 'display' && directive.modifiers.includes('if')) {
+			value = b.conditional(value, b.null, b.literal('none !important'));
+		} else if (directive.modifiers.includes('important')) {
 			value = b.binary('+', value, b.literal(' !important'));
 		}
 		return b.init(directive.name, value);

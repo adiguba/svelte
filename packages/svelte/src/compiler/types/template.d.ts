@@ -236,7 +236,7 @@ export namespace AST {
 		name: string;
 		/** The 'y' in `style:x={y}` */
 		value: true | ExpressionTag | Array<ExpressionTag | Text>;
-		modifiers: Array<'important'>;
+		modifiers: Array<'important' | 'if'>;
 		/** @internal */
 		metadata: {
 			expression: ExpressionMetadata;

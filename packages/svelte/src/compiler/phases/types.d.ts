@@ -54,6 +54,8 @@ export interface ComponentAnalysis extends Analysis {
 	event_directive_node: AST.OnDirective | null;
 	/** true if uses event attributes (onclick) on a DOM element */
 	uses_event_attributes: boolean;
+	/** true if uses style:display|if={} on a DOM element */
+	style_display_if: boolean;
 	/**
 	 * Contains the content of `<svelte:options customElement={...} />`,
 	 * or if not present a boolean which corresponds to the compiler option value
