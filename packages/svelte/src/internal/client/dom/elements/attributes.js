@@ -15,6 +15,7 @@ import {
 } from '../../runtime.js';
 import { clsx } from '../../../shared/attributes.js';
 import { set_class } from './class.js';
+import { set_style } from './style.js';
 
 export const CLASS = Symbol('class');
 export const STYLE = Symbol('style');
@@ -297,6 +298,10 @@ export function set_attributes(
 		next.class = null; /* force call to set_class() */
 	}
 
+	if (!next.style && next[STYLE]) {
+		next.class = null; /* force call to set_style() */
+	}
+
 	var setters = get_setters(element);
 
 	// @ts-expect-error
@@ -326,8 +331,18 @@ export function set_attributes(
 			continue;
 		}
 
+		if (key === 'class') {
+			var is_html = element.namespaceURI === 'http://www.w3.org/1999/xhtml';
+			set_class(element, is_html, value, css_hash, prev?.[CLASS], next[CLASS]);
+			continue;
+		}
+		if (key === 'style') {
+			set_style(element, value, prev?.[STYLE], next[STYLE]);
+			continue;
+		}
+
 		var prev_value = current[key];
-		if (value === prev_value && key !== 'class') {
+		if (value === prev_value) {
 			continue;
 		}
 
@@ -379,11 +394,6 @@ export function set_attributes(
 				// @ts-ignore
 				element[`__${event_name}`] = undefined;
 			}
-		} else if (key === 'class') {
-			var is_html = element.namespaceURI === 'http://www.w3.org/1999/xhtml';
-			set_class(element, is_html, value, css_hash, prev?.[CLASS], next[CLASS]);
-		} else if (key === 'style' && value != null) {
-			element.style.cssText = value + '';
 		} else if (key === 'autofocus') {
 			autofocus(/** @type {HTMLElement} */ (element), Boolean(value));
 		} else if (!is_custom_element && (key === '__value' || (key === 'value' && value != null))) {

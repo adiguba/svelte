@@ -2,7 +2,7 @@
 /** @import { Component, Payload, RenderOutput } from '#server' */
 /** @import { Store } from '#shared' */
 export { FILENAME, HMR } from '../../constants.js';
-import { attr, clsx, to_class } from '../shared/attributes.js';
+import { attr, clsx, to_class, to_style } from '../shared/attributes.js';
 import { is_promise, noop } from '../shared/utils.js';
 import { subscribe_to_store } from '../../store/utils.js';
 import {
@@ -544,7 +544,7 @@ export function props_id(payload) {
 	return uid;
 }
 
-export { attr, clsx, to_class };
+export { attr, clsx, to_class, to_style };
 
 export { html } from './blocks/html.js';
 

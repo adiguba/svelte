@@ -1,4 +1,4 @@
-/** @import { Expression, Identifier, ObjectExpression } from 'estree' */
+/** @import { ArrayExpression, Expression, Identifier, ObjectExpression } from 'estree' */
 /** @import { AST, ExpressionMetadata } from '#compiler' */
 /** @import { ComponentClientTransformState, ComponentContext } from '../../types' */
 import { escape_html } from '../../../../../../escaping.js';
@@ -7,7 +7,7 @@ import { is_ignored } from '../../../../../state.js';
 import { is_event_attribute } from '../../../../../utils/ast.js';
 import * as b from '../../../../../utils/builders.js';
 import { build_getter } from '../../utils.js';
-import { build_class_directives_object } from '../RegularElement.js';
+import { build_class_directives_object, build_style_directives_object } from '../RegularElement.js';
 import { build_template_chunk, get_expression_id } from './utils.js';
 
 /**
@@ -75,15 +75,15 @@ export function build_set_attributes(
 	}
 
 	if (class_directives.length) {
-		values.push(
-			b.prop(
-				'init',
-				b.array([b.id('$.CLASS')]),
-				build_class_directives_object(class_directives, context)
-			)
-		);
-		is_dynamic ||=
-			class_directives.find((directive) => directive.metadata.expression.has_state) !== null;
+		const { expression, has_state } = build_class_directives_object(class_directives, context);
+		values.push(b.prop('init', b.array([b.id('$.CLASS')]), expression));
+		is_dynamic ||= has_state;
+	}
+
+	if (style_directives.length) {
+		const { expression, has_state } = build_style_directives_object(style_directives, context);
+		values.push(b.prop('init', b.array([b.id('$.STYLE')]), expression));
+		is_dynamic ||= has_state;
 	}
 
 	const call = b.call(
@@ -106,50 +106,6 @@ export function build_set_attributes(
 
 	context.state.init.push(b.stmt(call));
 	return false;
-}
-
-/**
- * Serializes each style directive into something like `$.set_style(element, style_property, value)`
- * and adds it either to init or update, depending on whether or not the value or the attributes are dynamic.
- * @param {AST.StyleDirective[]} style_directives
- * @param {Identifier} element_id
- * @param {ComponentContext} context
- * @param {boolean} is_attributes_reactive
- */
-export function build_style_directives(
-	style_directives,
-	element_id,
-	context,
-	is_attributes_reactive
-) {
-	const state = context.state;
-
-	for (const directive of style_directives) {
-		const { has_state } = directive.metadata.expression;
-
-		let value =
-			directive.value === true
-				? build_getter({ name: directive.name, type: 'Identifier' }, context.state)
-				: build_attribute_value(directive.value, context, (value, metadata) =>
-						metadata.has_call ? get_expression_id(context.state, value) : value
-					).value;
-
-		const update = b.stmt(
-			b.call(
-				'$.set_style',
-				element_id,
-				b.literal(directive.name),
-				value,
-				/** @type {Expression} */ (directive.modifiers.includes('important') ? b.true : undefined)
-			)
-		);
-
-		if (has_state || is_attributes_reactive) {
-			state.update.push(update);
-		} else {
-			state.init.push(update);
-		}
-	}
 }
 
 /**
@@ -225,9 +181,10 @@ export function build_set_class(
 	/** @type {ObjectExpression | undefined} */
 	let next;
 	if (class_directives.length) {
-		next = build_class_directives_object(class_directives, context);
+		const r = build_class_directives_object(class_directives, context);
+		next = r.expression;
+		has_state ||= r.has_state;
 
-		has_state = has_state || !!class_directives.find((d) => d.metadata.expression.has_state);
 		if (has_state) {
 			previous_id = b.id(context.state.scope.generate('classes'));
 			context.state.init.push(b.declaration('let', [b.declarator(previous_id)]));
@@ -268,6 +225,51 @@ export function build_set_class(
 	}
 
 	const update = b.stmt(set_class);
+	if (has_state) {
+		context.state.update.push(update);
+		return true;
+	} else {
+		context.state.init.push(update);
+		return false;
+	}
+}
+
+/**
+ * @param {Identifier} node_id
+ * @param {Expression} value
+ * @param {boolean} has_state
+ * @param {AST.StyleDirective[]} style_directives
+ * @param {ComponentContext} context
+ * @returns {boolean}
+ */
+export function build_set_style(node_id, value, has_state, style_directives, context) {
+	/** @type {Identifier | undefined} */
+	let previous_id;
+	/** @type {ObjectExpression | Identifier | undefined} */
+	let prev;
+	/** @type {ArrayExpression | ObjectExpression | undefined} */
+	let next;
+	if (style_directives.length) {
+		const r = build_style_directives_object(style_directives, context);
+		next = r.expression;
+		has_state ||= r.has_state;
+		if (has_state) {
+			previous_id = b.id(context.state.scope.generate('styles'));
+			context.state.init.push(b.declaration('let', [b.declarator(previous_id)]));
+			prev = previous_id;
+		} else {
+			prev = b.object([]);
+		}
+	}
+
+	/** @type {Expression} */
+	let set_style = b.call('$.set_style', node_id, value, prev, next);
+
+	if (previous_id) {
+		set_style = b.assignment('=', previous_id, set_style);
+	}
+
+	const update = b.stmt(set_style);
 	if (has_state) {
 		context.state.update.push(update);
 		return true;

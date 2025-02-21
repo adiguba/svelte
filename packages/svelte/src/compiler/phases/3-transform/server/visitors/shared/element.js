@@ -1,4 +1,4 @@
-/** @import { Expression, Literal, ObjectExpression } from 'estree' */
+/** @import { ArrayExpression, Expression, Literal, ObjectExpression } from 'estree' */
 /** @import { AST, Namespace } from '#compiler' */
 /** @import { ComponentContext, ComponentServerTransformState } from '../../types.js' */
 import {
@@ -223,14 +223,14 @@ export function build_element_attributes(node, context) {
 		}
 	}
 
-	if (style_directives.length > 0 && !has_spread) {
-		build_style_directives(
-			style_directives,
-			/** @type {AST.Attribute | null} */ (attributes[style_index] ?? null),
-			context
+	if (class_directives.length && !has_spread) {
+		const class_attribute = build_to_style(
+			node.metadata.scoped ? context.state.analysis.css.hash : null,
+			class_directives,
+			/** @type {AST.Attribute | null} */ (attributes[class_index] ?? null)
 		);
-		if (style_index > -1) {
-			attributes.splice(style_index, 1);
+		if (class_index === -1) {
+			attributes.push(class_attribute);
 		}
 	}
 
@@ -384,7 +384,7 @@ function build_element_spread_attributes(
  * @returns
  */
 function build_to_class(hash, class_directives, class_attribute) {
-	if (class_attribute === null) {
+	if (class_attribute == null) {
 		class_attribute = create_attribute('class', -1, -1, []);
 	}
 
@@ -441,6 +441,81 @@ function build_to_class(hash, class_directives, class_attribute) {
 		}
 	};
 	return class_attribute;
+}
+
+/**
+ *
+ * @param {AST.StyleDirective[]} style_directives
+ * @param {AST.Attribute | null} style_attribute
+ * @param {ComponentContext} context
+ * @returns
+ */
+function build_to_style(style_directives, style_attribute, context) {
+	if (style_attribute == null) {
+		style_attribute = create_attribute('class', -1, -1, []);
+	}
+
+	/** @type {ArrayExpression | ObjectExpression | undefined} */
+	let styles;
+	if (style_directives.length) {
+		let normal_properties = [];
+		let important_properties = [];
+
+		for (const directive of style_directives) {
+			const expression =
+				directive.value === true
+					? b.id(directive.name)
+					: build_attribute_value(directive.value, context, true);
+
+			let name = directive.name;
+			if (name[0] !== '-' || name[1] !== '-') {
+				name = name.toLowerCase();
+			}
+
+			const property = b.init(directive.name, expression);
+			if (directive.modifiers.includes('important')) {
+				important_properties.push(property);
+			} else {
+				normal_properties.push(property);
+			}
+		}
+
+		if (important_properties.length) {
+			styles = b.array([b.object(normal_properties), b.object(important_properties)]);
+		} else {
+			styles = b.object(normal_properties);
+		}
+	}
+
+	/** @type {Expression} */
+	let style;
+	if (style_attribute.value === true) {
+		style = b.literal('');
+	} else if (Array.isArray(style_attribute.value)) {
+		if (style_attribute.value.length === 0) {
+			style = b.null;
+		} else {
+			style = style_attribute.value
+				.map((val) => (val.type === 'Text' ? b.literal(val.data) : val.expression))
+				.reduce((left, right) => b.binary('+', left, right));
+		}
+	} else {
+		style = style_attribute.value.expression;
+	}
+
+	/** @type {Expression} */
+	let expression = b.call('$.to_style', style, styles);
+
+	style_attribute.value = {
+		type: 'ExpressionTag',
+		start: -1,
+		end: -1,
+		expression: expression,
+		metadata: {
+			expression: create_expression_metadata()
+		}
+	};
+	return style_attribute;
 }
 
 /**

@@ -83,3 +83,97 @@ export function to_class(clazz, hash, classes) {
 	}
 	return class_name;
 }
+
+/**
+ * @param {string|null} value
+ * @param {Record<string,any>|[Record<string,any>,Record<string,any>]} [styles]
+ * @returns {string|null}
+ */
+export function to_style(value, styles) {
+	if (styles) {
+		var new_style = '';
+		let normal_styles;
+		let important_styles;
+		if (Array.isArray(styles)) {
+			normal_styles = styles[0];
+			important_styles = styles[1];
+		} else {
+			normal_styles = styles;
+		}
+		if (value) {
+			/** @type {boolean | '"' | "'"} */
+			var in_str = false;
+			var in_apo = 0;
+			var in_comment = false;
+
+			var reserved_names = [];
+			if (normal_styles) {
+				reserved_names.push(...Object.keys(normal_styles));
+			}
+			if (important_styles) {
+				reserved_names.push(...Object.keys(important_styles));
+			}
+
+			var start_index = 0;
+			var name_index = -1;
+			const len = value.length;
+			for (var i = 0; i < len; i++) {
+				var c = value[i];
+
+				if (in_comment) {
+					if (c === '/' && value[i - 1] === '*') {
+						in_comment = false;
+					}
+				} else if (in_str) {
+					if (in_str === c) {
+						in_str = false;
+					}
+				} else if (c === '/' && value[i + 1] === '*') {
+					in_comment = true;
+				} else if (c === '"' || c === "'") {
+					in_str = c;
+				} else if (c === '(') {
+					in_apo++;
+				} else if (c === ')') {
+					in_apo--;
+				} else if (in_apo === 0) {
+					if (c === ':' && name_index < 0) {
+						name_index = i;
+					} else if ((c === ';' && !in_str && in_apo <= 0) || i === len - 1) {
+						if (name_index > 0 && name_index < i) {
+							let name = value.substring(start_index, name_index).trim();
+							if (name.indexOf('/*') > 0) {
+								name = name.replaceAll(/\/\*.*?\*\//g, '').trim();
+							}
+							if (name[0] !== '-' || name[1] !== '-') {
+								name = name.toLowerCase();
+							}
+							if (!reserved_names.includes(name)) {
+								if (i === len - 1) {
+									i++;
+								}
+								const property = value.substring(start_index, i).trim();
+								new_style += `${property};`;
+							}
+						}
+						start_index = i + 1;
+						name_index = -1;
+					}
+				}
+			}
+		}
+
+		for (const key in normal_styles) {
+			const val = normal_styles[key];
+			new_style += `${key}:${val};`;
+		}
+		for (const key in important_styles) {
+			const val = important_styles[key];
+			new_style += `${key}:${val} !important;`;
+		}
+		return new_style;
+	} else if (value == null) {
+		return null;
+	}
+	return '' + value;
+}

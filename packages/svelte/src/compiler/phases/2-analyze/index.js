@@ -775,8 +775,10 @@ export function analyze_component(root, source, options) {
 		}
 
 		let has_class = false;
+		let has_style = false;
 		let has_spread = false;
 		let has_class_directive = false;
+		let has_style_directive = false;
 		for (const attribute of node.attributes) {
 			// The spread method appends the hash to the end of the class attribute on its own
 			if (attribute.type === 'SpreadAttribute') {
@@ -784,22 +786,44 @@ export function analyze_component(root, source, options) {
 				break;
 			}
 			has_class_directive ||= attribute.type === 'ClassDirective';
-			has_class ||= attribute.type === 'Attribute' && attribute.name.toLowerCase() === 'class';
+			has_style_directive ||= attribute.type === 'StyleDirective';
+			if (attribute.type == 'Attribute') {
+				const name = attribute.name.toLowerCase();
+				has_class ||= name === 'class';
+				has_style ||= name === 'style';
+			}
 		}
 
-		// We need an empty class to generate the set_class() or class="" correctly
-		if (!has_spread && !has_class && (node.metadata.scoped || has_class_directive)) {
-			node.attributes.push(
-				create_attribute('class', -1, -1, [
-					{
-						type: 'Text',
-						data: '',
-						raw: '',
-						start: -1,
-						end: -1
-					}
-				])
-			);
+		if (!has_spread) {
+			// We need an empty class to generate the set_class() or class="" correctly
+			if (!has_class && (node.metadata.scoped || has_class_directive)) {
+				node.attributes.push(
+					create_attribute('class', -1, -1, [
+						{
+							type: 'Text',
+							data: '',
+							raw: '',
+							start: -1,
+							end: -1
+						}
+					])
+				);
+			}
+
+			// We need an empty class to generate the set_style() correctly
+			if (!has_style && has_style_directive) {
+				node.attributes.push(
+					create_attribute('style', -1, -1, [
+						{
+							type: 'Text',
+							data: '',
+							raw: '',
+							start: -1,
+							end: -1
+						}
+					])
+				);
+			}
 		}
 	}
 
