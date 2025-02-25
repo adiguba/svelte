@@ -1,6 +1,10 @@
+import { flushSync } from 'svelte';
 import { test } from '../../test';
 
 export default test({
+	compileOptions: {
+		dev: true // to ensure dev mode does not break context in some way
+	},
 	html: `
 		<div class="tabs">
 			<div class="tab-list">
@@ -12,11 +16,12 @@ export default test({
 		</div>
 	`,
 
-	async test({ assert, component, target, window }) {
+	test({ assert, component, target, window }) {
 		const click = new window.MouseEvent('click', { bubbles: true });
 		let buttons = target.querySelectorAll('button');
 
-		await buttons[1].dispatchEvent(click);
+		buttons[1].dispatchEvent(click);
+		flushSync();
 
 		assert.htmlEqual(
 			target.innerHTML,
@@ -51,7 +56,8 @@ export default test({
 
 		buttons = target.querySelectorAll('button');
 
-		await buttons[1].dispatchEvent(click);
+		buttons[1].dispatchEvent(click);
+		flushSync();
 
 		assert.htmlEqual(
 			target.innerHTML,

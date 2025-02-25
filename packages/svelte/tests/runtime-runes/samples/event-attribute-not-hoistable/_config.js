@@ -1,18 +1,34 @@
+import { flushSync } from 'svelte';
 import { test } from '../../test';
 
-// Checks that event handlers are not hoisted when one of them is not delegateable
 export default test({
-	html: `<button>0</button>`,
+	html: `<button>0</button><button>x0</button><button>y0</button>`,
 
-	async test({ assert, target }) {
-		const [button] = target.querySelectorAll('button');
+	test({ assert, target }) {
+		const [btn1, btn2, btn3] = target.querySelectorAll('button');
 
-		button.click();
-		await Promise.resolve();
-		assert.htmlEqual(target.innerHTML, '<button>1</button>');
+		flushSync(() => {
+			btn1.click();
+		});
 
-		button.dispatchEvent(new MouseEvent('mouseenter'));
-		await Promise.resolve();
-		assert.htmlEqual(target.innerHTML, '<button>2</button>');
+		assert.htmlEqual(target.innerHTML, '<button>1</button><button>x0</button><button>y0</button>');
+
+		flushSync(() => {
+			btn1.dispatchEvent(new MouseEvent('mouseenter'));
+		});
+
+		assert.htmlEqual(target.innerHTML, '<button>2</button><button>x0</button><button>y0</button>');
+
+		flushSync(() => {
+			btn2.click();
+		});
+
+		assert.htmlEqual(target.innerHTML, '<button>2</button><button>x1</button><button>y0</button>');
+
+		flushSync(() => {
+			btn3.click();
+		});
+
+		assert.htmlEqual(target.innerHTML, '<button>2</button><button>x1</button><button>y1</button>');
 	}
 });

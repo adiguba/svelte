@@ -2,14 +2,14 @@
     import C from './irrelevant';
 </script>
 
-<button on:click />
-<button xml:click />
-<button xmlns:click />
-<button xlink:click />
+<button on:click>click me</button>
+<button xml:click>click me</button>
+<button xmlns:click>click me</button>
+<button xlink:click>click me</button>
 <C on:click />
 <C xml:click />
 <C xmlns:click />
 <C xlink:click />
 
-<button foo:bar />
+<button foo:bar>click me</button>
 <C foo:bar />

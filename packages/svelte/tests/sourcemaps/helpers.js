@@ -1,4 +1,6 @@
+/** @import { Location } from 'locate-character' */
 import * as assert from 'node:assert';
+import * as path from 'node:path';
 import { getLocator } from 'locate-character';
 import MagicString, { Bundle } from 'magic-string';
 
@@ -14,7 +16,7 @@ export function assert_mapped({ code, filename, input, input_code, preprocessed 
 	if (filename === undefined) filename = 'input.svelte';
 	if (input_code === undefined) input_code = code;
 
-	const source_loc = /** @type {import('locate-character').Location} */ (locate_input(input_code));
+	const source_loc = /** @type {Location} */ (locate_input(input_code));
 	assert.notEqual(source_loc, undefined, `failed to locate "${input_code}" in "${filename}"`);
 
 	const transformed_loc = preprocessed.locate_1(code);
@@ -111,7 +113,7 @@ export function magic_string_preprocessor_result(filename, src) {
 	return {
 		code: src.toString(),
 		map: src.generateMap({
-			source: filename,
+			source: path.basename(filename), // preprocessors are expected to return `sources: [file_basename]`
 			hires: true,
 			includeContent: false
 		})

@@ -1,28 +1,21 @@
-// index.svelte (Svelte VERSION)
-// Note: compiler output will change before 5.0 is released!
-import * as $ from "svelte/internal/server";
+import * as $ from 'svelte/internal/server';
 
-export default function Function_prop_no_getter($$payload, $$props) {
-	$.push(true);
-
+export default function Function_prop_no_getter($$payload) {
 	let count = 0;
 
 	function onmouseup() {
 		count += 2;
 	}
 
-	const anchor = $.create_anchor($$payload);
-
-	$$payload.out += `${anchor}`;
+	const plusOne = (num) => num + 1;
 
 	Button($$payload, {
 		onmousedown: () => count += 1,
 		onmouseup,
-		children: ($$payload, $$slotProps) => {
-			$$payload.out += `clicks: ${$.escape(count)}`;
-		}
+		onmouseenter: () => count = plusOne(count),
+		children: ($$payload) => {
+			$$payload.out += `<!---->clicks: ${$.escape(count)}`;
+		},
+		$$slots: { default: true }
 	});
-
-	$$payload.out += `${anchor}`;
-	$.pop();
 }

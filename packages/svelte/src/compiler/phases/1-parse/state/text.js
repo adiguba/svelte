@@ -1,6 +1,8 @@
+/** @import { AST } from '#compiler' */
+/** @import { Parser } from '../index.js' */
 import { decode_character_references } from '../utils/html.js';
 
-/** @param {import('../index.js').Parser} parser */
+/** @param {Parser} parser */
 export default function text(parser) {
 	const start = parser.index;
 
@@ -10,13 +12,12 @@ export default function text(parser) {
 		data += parser.template[parser.index++];
 	}
 
-	parser.append(
-		/** @type {import('#compiler').Text} */ ({
-			type: 'Text',
-			start,
-			end: parser.index,
-			raw: data,
-			data: decode_character_references(data, false)
-		})
-	);
+	/** @type {AST.Text} */
+	parser.append({
+		type: 'Text',
+		start,
+		end: parser.index,
+		raw: data,
+		data: decode_character_references(data, false)
+	});
 }

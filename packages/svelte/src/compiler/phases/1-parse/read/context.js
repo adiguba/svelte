@@ -1,69 +1,47 @@
-// @ts-expect-error acorn type definitions are borked in the release we use
-import { isIdentifierStart } from 'acorn';
-import full_char_code_at from '../utils/full_char_code_at.js';
-import {
-	is_bracket_open,
-	is_bracket_close,
-	is_bracket_pair,
-	get_bracket_close
-} from '../utils/bracket.js';
+/** @import { Location } from 'locate-character' */
+/** @import { Pattern } from 'estree' */
+/** @import { Parser } from '../index.js' */
+import { is_bracket_open, is_bracket_close, get_bracket_close } from '../utils/bracket.js';
 import { parse_expression_at } from '../acorn.js';
 import { regex_not_newline_characters } from '../../patterns.js';
-import { error } from '../../../errors.js';
+import * as e from '../../../errors.js';
+import { locator } from '../../../state.js';
 
 /**
- * @param {import('../index.js').Parser} parser
- * @returns {any}
+ * @param {Parser} parser
+ * @returns {Pattern}
  */
-export default function read_context(parser) {
+export default function read_pattern(parser) {
 	const start = parser.index;
 	let i = parser.index;
 
-	const code = full_char_code_at(parser.template, i);
-	if (isIdentifierStart(code, true)) {
-		const name = /** @type {string} */ (parser.read_identifier());
+	const name = parser.read_identifier();
+
+	if (name !== null) {
 		const annotation = read_type_annotation(parser);
 
 		return {
 			type: 'Identifier',
 			name,
 			start,
+			loc: {
+				start: /** @type {Location} */ (locator(start)),
+				end: /** @type {Location} */ (locator(parser.index))
+			},
 			end: parser.index,
 			typeAnnotation: annotation
 		};
 	}
 
-	if (!is_bracket_open(code)) {
-		error(i, 'expected-pattern');
+	if (!is_bracket_open(parser.template[i])) {
+		e.expected_pattern(i);
 	}
 
-	const bracket_stack = [code];
-	i += code <= 0xffff ? 1 : 2;
-
-	while (i < parser.template.length) {
-		const code = full_char_code_at(parser.template, i);
-		if (is_bracket_open(code)) {
-			bracket_stack.push(code);
-		} else if (is_bracket_close(code)) {
-			const popped = /** @type {number} */ (bracket_stack.pop());
-			if (!is_bracket_pair(popped, code)) {
-				error(
-					i,
-					'expected-token',
-					String.fromCharCode(/** @type {number} */ (get_bracket_close(popped)))
-				);
-			}
-			if (bracket_stack.length === 0) {
-				i += code <= 0xffff ? 1 : 2;
-				break;
-			}
-		}
-		i += code <= 0xffff ? 1 : 2;
-	}
-
+	i = match_bracket(parser, start);
 	parser.index = i;
 
 	const pattern_string = parser.template.slice(start, i);
+
 	try {
 		// the length of the `space_with_newline` has to be start - 1
 		// because we added a `(` in front of the pattern_string,
@@ -94,28 +72,116 @@ export default function read_context(parser) {
 }
 
 /**
- * @param {import('../index.js').Parser} parser
+ * @param {Parser} parser
+ * @param {number} start
+ */
+function match_bracket(parser, start) {
+	const bracket_stack = [];
+
+	let i = start;
+
+	while (i < parser.template.length) {
+		let char = parser.template[i++];
+
+		if (char === "'" || char === '"' || char === '`') {
+			i = match_quote(parser, i, char);
+			continue;
+		}
+
+		if (is_bracket_open(char)) {
+			bracket_stack.push(char);
+		} else if (is_bracket_close(char)) {
+			const popped = /** @type {string} */ (bracket_stack.pop());
+			const expected = /** @type {string} */ (get_bracket_close(popped));
+
+			if (char !== expected) {
+				e.expected_token(i - 1, expected);
+			}
+
+			if (bracket_stack.length === 0) {
+				return i;
+			}
+		}
+	}
+
+	e.unexpected_eof(parser.template.length);
+}
+
+/**
+ * @param {Parser} parser
+ * @param {number} start
+ * @param {string} quote
+ */
+function match_quote(parser, start, quote) {
+	let is_escaped = false;
+	let i = start;
+
+	while (i < parser.template.length) {
+		const char = parser.template[i++];
+
+		if (is_escaped) {
+			is_escaped = false;
+			continue;
+		}
+
+		if (char === quote) {
+			return i;
+		}
+
+		if (char === '\\') {
+			is_escaped = true;
+		}
+
+		if (quote === '`' && char === '$' && parser.template[i] === '{') {
+			i = match_bracket(parser, i);
+		}
+	}
+
+	e.unterminated_string_constant(start);
+}
+
+/**
+ * @param {Parser} parser
  * @returns {any}
  */
 function read_type_annotation(parser) {
-	const index = parser.index;
+	const start = parser.index;
 	parser.allow_whitespace();
 
-	if (parser.eat(':')) {
-		// we need to trick Acorn into parsing the type annotation
-		const insert = '_ as ';
-		let a = parser.index - insert.length;
-		const template = ' '.repeat(a) + insert + parser.template.slice(parser.index);
-		let expression = parse_expression_at(template, parser.ts, a);
-
-		// `array as item: string, index` becomes `string, index`, which is mistaken as a sequence expression - fix that
-		if (expression.type === 'SequenceExpression') {
-			expression = expression.expressions[0];
-		}
-
-		parser.index = /** @type {number} */ (expression.end);
-		return /** @type {any} */ (expression).typeAnnotation;
-	} else {
-		parser.index = index;
+	if (!parser.eat(':')) {
+		parser.index = start;
+		return undefined;
 	}
+
+	// we need to trick Acorn into parsing the type annotation
+	const insert = '_ as ';
+	let a = parser.index - insert.length;
+	const template =
+		parser.template.slice(0, a).replace(/[^\n]/g, ' ') +
+		insert +
+		// If this is a type annotation for a function parameter, Acorn-TS will treat subsequent
+		// parameters as part of a sequence expression instead, and will then error on optional
+		// parameters (`?:`). Therefore replace that sequence with something that will not error.
+		parser.template.slice(parser.index).replace(/\?\s*:/g, ':');
+	let expression = parse_expression_at(template, parser.ts, a);
+
+	// `foo: bar = baz` gets mangled — fix it
+	if (expression.type === 'AssignmentExpression') {
+		let b = expression.right.start;
+		while (template[b] !== '=') b -= 1;
+		expression = parse_expression_at(template.slice(0, b), parser.ts, a);
+	}
+
+	// `array as item: string, index` becomes `string, index`, which is mistaken as a sequence expression - fix that
+	if (expression.type === 'SequenceExpression') {
+		expression = expression.expressions[0];
+	}
+
+	parser.index = /** @type {number} */ (expression.end);
+	return {
+		type: 'TSTypeAnnotation',
+		start,
+		end: parser.index,
+		typeAnnotation: /** @type {any} */ (expression).typeAnnotation
+	};
 }

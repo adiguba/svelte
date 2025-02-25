@@ -24,27 +24,54 @@
 					"end": 42,
 					"name": "foo"
 				},
-				"context": {
-					"type": "Identifier",
-					"name": "msg",
-					"start": 43,
-					"end": 54,
-					"typeAnnotation": {
-						"type": "TSStringKeyword",
-						"start": 48,
-						"end": 54,
+				"parameters": [
+					{
+						"type": "Identifier",
+						"start": 43,
+						"end": 46,
 						"loc": {
 							"start": {
-								"line": 1,
-								"column": 48
+								"line": 3,
+								"column": 14
 							},
 							"end": {
-								"line": 1,
-								"column": 54
+								"line": 3,
+								"column": 25
+							}
+						},
+						"name": "msg",
+						"typeAnnotation": {
+							"type": "TSTypeAnnotation",
+							"start": 46,
+							"end": 54,
+							"loc": {
+								"start": {
+									"line": 3,
+									"column": 17
+								},
+								"end": {
+									"line": 3,
+									"column": 25
+								}
+							},
+							"typeAnnotation": {
+								"type": "TSStringKeyword",
+								"start": 48,
+								"end": 54,
+								"loc": {
+									"start": {
+										"line": 3,
+										"column": 19
+									},
+									"end": {
+										"line": 3,
+										"column": 25
+									}
+								}
 							}
 						}
 					}
-				},
+				],
 				"body": {
 					"type": "Fragment",
 					"nodes": [
@@ -85,8 +112,7 @@
 											"name": "msg"
 										}
 									}
-								],
-								"transparent": true
+								]
 							}
 						},
 						{
@@ -96,8 +122,7 @@
 							"raw": "\n",
 							"data": "\n"
 						}
-					],
-					"transparent": false
+					]
 				}
 			},
 			{
@@ -112,9 +137,9 @@
 				"start": 83,
 				"end": 101,
 				"expression": {
-					"type": "Identifier",
+					"type": "CallExpression",
 					"start": 92,
-					"end": 95,
+					"end": 100,
 					"loc": {
 						"start": {
 							"line": 7,
@@ -122,30 +147,47 @@
 						},
 						"end": {
 							"line": 7,
-							"column": 12
+							"column": 17
 						}
 					},
-					"name": "foo"
-				},
-				"argument": {
-					"type": "Identifier",
-					"start": 96,
-					"end": 99,
-					"loc": {
-						"start": {
-							"line": 7,
-							"column": 13
+					"callee": {
+						"type": "Identifier",
+						"start": 92,
+						"end": 95,
+						"loc": {
+							"start": {
+								"line": 7,
+								"column": 9
+							},
+							"end": {
+								"line": 7,
+								"column": 12
+							}
 						},
-						"end": {
-							"line": 7,
-							"column": 16
-						}
+						"name": "foo"
 					},
-					"name": "msg"
+					"arguments": [
+						{
+							"type": "Identifier",
+							"start": 96,
+							"end": 99,
+							"loc": {
+								"start": {
+									"line": 7,
+									"column": 13
+								},
+								"end": {
+									"line": 7,
+									"column": 16
+								}
+							},
+							"name": "msg"
+						}
+					],
+					"optional": false
 				}
 			}
-		],
-		"transparent": false
+		]
 	},
 	"options": null,
 	"instance": {
@@ -169,6 +211,23 @@
 			},
 			"body": [],
 			"sourceType": "module"
-		}
+		},
+		"attributes": [
+			{
+				"type": "Attribute",
+				"start": 8,
+				"end": 17,
+				"name": "lang",
+				"value": [
+					{
+						"start": 14,
+						"end": 16,
+						"type": "Text",
+						"raw": "ts",
+						"data": "ts"
+					}
+				]
+			}
+		]
 	}
 }

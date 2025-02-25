@@ -1,13 +1,17 @@
+/** @import { Expression } from 'estree' */
+/** @import { AST } from '#compiler' */
+/** @import * as Legacy from './types/legacy-nodes.js' */
 import { walk } from 'zimmerframe';
 import {
 	regex_ends_with_whitespaces,
 	regex_not_whitespace,
 	regex_starts_with_whitespaces
 } from './phases/patterns.js';
+import { extract_svelte_ignore } from './utils/extract_svelte_ignore.js';
 
 /**
  * Some of the legacy Svelte AST nodes remove whitespace from the start and end of their children.
- * @param {import('./types/template.js').TemplateNode[]} nodes
+ * @param {AST.TemplateNode[]} nodes
  */
 function remove_surrounding_whitespace_nodes(nodes) {
 	const first = nodes.at(0);
@@ -32,20 +36,15 @@ function remove_surrounding_whitespace_nodes(nodes) {
 /**
  * Transform our nice modern AST into the monstrosity emitted by Svelte 4
  * @param {string} source
- * @param {import('#compiler').Root} ast
- * @returns {import('./types/legacy-nodes.js').LegacySvelteNode}
+ * @param {AST.Root} ast
+ * @returns {Legacy.LegacyRoot}
  */
 export function convert(source, ast) {
-	const root =
-		/** @type {import('./types/template.js').SvelteNode | import('./types/legacy-nodes.js').LegacySvelteNode} */ (
-			ast
-		);
+	const root = /** @type {AST.SvelteNode | Legacy.LegacySvelteNode} */ (ast);
 
-	return /** @type {import('./types/legacy-nodes.js').LegacySvelteNode} */ (
+	return /** @type {Legacy.LegacyRoot} */ (
 		walk(root, null, {
 			_(node, { next }) {
-				// @ts-ignore
-				delete node.parent;
 				// @ts-ignore
 				delete node.metadata;
 				next();
@@ -61,8 +60,6 @@ export function convert(source, ast) {
 						idx = node.fragment.nodes.length;
 					}
 
-					// @ts-ignore
-					delete options.__raw__.parent;
 					node.fragment.nodes.splice(idx, 0, /** @type {any} */ (options).__raw__);
 				}
 
@@ -73,8 +70,8 @@ export function convert(source, ast) {
 				let end = null;
 
 				if (node.fragment.nodes.length > 0) {
-					const first = /** @type {import('#compiler').BaseNode} */ (node.fragment.nodes.at(0));
-					const last = /** @type {import('#compiler').BaseNode} */ (node.fragment.nodes.at(-1));
+					const first = /** @type {AST.BaseNode} */ (node.fragment.nodes.at(0));
+					const last = /** @type {AST.BaseNode} */ (node.fragment.nodes.at(-1));
 
 					start = first.start;
 					end = last.end;
@@ -85,12 +82,12 @@ export function convert(source, ast) {
 
 				if (instance) {
 					// @ts-ignore
-					delete instance.parent;
+					delete instance.attributes;
 				}
 
 				if (module) {
 					// @ts-ignore
-					delete module.parent;
+					delete module.attributes;
 				}
 
 				return {
@@ -102,14 +99,7 @@ export function convert(source, ast) {
 					},
 					instance,
 					module,
-					css: ast.css
-						? walk(ast.css, null, {
-								_(node) {
-									// @ts-ignore
-									delete node.parent;
-								}
-						  })
-						: undefined
+					css: ast.css ? visit(ast.css) : undefined
 				};
 			},
 			AnimateDirective(node) {
@@ -148,29 +138,37 @@ export function convert(source, ast) {
 				};
 
 				if (node.pending) {
-					const first = /** @type {import('#compiler').BaseNode} */ (node.pending.nodes.at(0));
-					const last = /** @type {import('#compiler').BaseNode} */ (node.pending.nodes.at(-1));
+					const first = node.pending.nodes.at(0);
+					const last = node.pending.nodes.at(-1);
 
-					pendingblock.start = first.start;
-					pendingblock.end = last.end;
+					pendingblock.start = first?.start ?? source.indexOf('}', node.expression.end) + 1;
+					pendingblock.end = last?.end ?? pendingblock.start;
 					pendingblock.skip = false;
 				}
 
 				if (node.then) {
-					const first = /** @type {import('#compiler').BaseNode} */ (node.then.nodes.at(0));
-					const last = /** @type {import('#compiler').BaseNode} */ (node.then.nodes.at(-1));
+					const first = node.then.nodes.at(0);
+					const last = node.then.nodes.at(-1);
 
-					thenblock.start = pendingblock.end ?? first.start;
-					thenblock.end = last.end;
+					thenblock.start =
+						pendingblock.end ?? first?.start ?? source.indexOf('}', node.expression.end) + 1;
+					thenblock.end =
+						last?.end ?? source.lastIndexOf('}', pendingblock.end ?? node.expression.end) + 1;
 					thenblock.skip = false;
 				}
 
 				if (node.catch) {
-					const first = /** @type {import('#compiler').BaseNode} */ (node.catch.nodes.at(0));
-					const last = /** @type {import('#compiler').BaseNode} */ (node.catch.nodes.at(-1));
+					const first = node.catch.nodes.at(0);
+					const last = node.catch.nodes.at(-1);
 
-					catchblock.start = thenblock.end ?? pendingblock.end ?? first.start;
-					catchblock.end = last.end;
+					catchblock.start =
+						thenblock.end ??
+						pendingblock.end ??
+						first?.start ??
+						source.indexOf('}', node.expression.end) + 1;
+					catchblock.end =
+						last?.end ??
+						source.lastIndexOf('}', thenblock.end ?? pendingblock.end ?? node.expression.end) + 1;
 					catchblock.skip = false;
 				}
 
@@ -192,6 +190,32 @@ export function convert(source, ast) {
 			ClassDirective(node) {
 				return { ...node, type: 'Class' };
 			},
+			Comment(node) {
+				return {
+					...node,
+					ignores: extract_svelte_ignore(node.start, node.data, false)
+				};
+			},
+			ComplexSelector(node, { next }) {
+				next(); // delete inner metadata/parent properties
+
+				const children = [];
+
+				for (const child of node.children) {
+					if (child.combinator) {
+						children.push(child.combinator);
+					}
+
+					children.push(...child.selectors);
+				}
+
+				return {
+					type: 'Selector',
+					start: node.start,
+					end: node.end,
+					children
+				};
+			},
 			Component(node, { visit }) {
 				return {
 					type: 'InlineComponent',
@@ -199,25 +223,20 @@ export function convert(source, ast) {
 					end: node.end,
 					name: node.name,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
 			// @ts-ignore
 			ConstTag(node) {
-				if (
-					/** @type {import('./types/legacy-nodes.js').LegacyConstTag} */ (node).expression !==
-					undefined
-				) {
+				if (/** @type {Legacy.LegacyConstTag} */ (node).expression !== undefined) {
 					return node;
 				}
 
-				const modern_node = /** @type {import('#compiler').ConstTag} */ (node);
+				const modern_node = /** @type {AST.ConstTag} */ (node);
 				const { id: left } = { ...modern_node.declaration.declarations[0] };
 				// @ts-ignore
 				delete left.typeAnnotation;
@@ -244,8 +263,7 @@ export function convert(source, ast) {
 					end: node.end,
 					expression: node.expression,
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
@@ -324,22 +342,25 @@ export function convert(source, ast) {
 						start,
 						end: end,
 						children: node.alternate.nodes.map(
-							(child) =>
-								/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+							(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 						)
 					};
 				}
+
+				const start = node.elseif
+					? node.consequent.nodes[0]?.start ??
+						source.lastIndexOf('{', /** @type {number} */ (node.end) - 1)
+					: node.start;
 
 				remove_surrounding_whitespace_nodes(node.consequent.nodes);
 
 				return {
 					type: 'IfBlock',
-					start: node.start,
+					start,
 					end: node.end,
 					expression: node.test,
 					children: node.consequent.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					),
 					else: elseblock,
 					elseif: node.elseif ? true : undefined
@@ -356,8 +377,22 @@ export function convert(source, ast) {
 					start: node.start,
 					end: node.end,
 					expression: node.expression,
-					context: node.context,
+					parameters: node.parameters,
 					children: node.body.nodes.map((child) => visit(child))
+				};
+			},
+			// @ts-expect-error
+			SvelteBoundary(node, { visit }) {
+				remove_surrounding_whitespace_nodes(node.fragment.nodes);
+				return {
+					type: 'SvelteBoundary',
+					name: 'svelte:boundary',
+					start: node.start,
+					end: node.end,
+					attributes: node.attributes.map(
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
+					),
+					children: node.fragment.nodes.map((child) => visit(child))
 				};
 			},
 			RegularElement(node, { visit }) {
@@ -377,17 +412,50 @@ export function convert(source, ast) {
 					end: node.end,
 					name: node.name,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
+			Attribute(node, { visit, next, path }) {
+				if (node.value !== true && !Array.isArray(node.value)) {
+					path.push(node);
+					const value = /** @type {Legacy.LegacyAttribute['value']} */ ([visit(node.value)]);
+					path.pop();
+
+					return {
+						...node,
+						value
+					};
+				} else {
+					return next();
+				}
+			},
+			StyleDirective(node, { visit, next, path }) {
+				if (node.value !== true && !Array.isArray(node.value)) {
+					path.push(node);
+					const value = /** @type {Legacy.LegacyStyleDirective['value']} */ ([visit(node.value)]);
+					path.pop();
+
+					return {
+						...node,
+						value
+					};
+				} else {
+					return next();
+				}
+			},
 			SpreadAttribute(node) {
 				return { ...node, type: 'Spread' };
+			},
+			StyleSheet(node, context) {
+				return {
+					...node,
+					...context.next(),
+					type: 'Style'
+				};
 			},
 			SvelteBody(node, { visit }) {
 				return {
@@ -396,12 +464,10 @@ export function convert(source, ast) {
 					start: node.start,
 					end: node.end,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
@@ -413,12 +479,10 @@ export function convert(source, ast) {
 					end: node.end,
 					expression: node.expression,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
@@ -429,19 +493,21 @@ export function convert(source, ast) {
 					start: node.start,
 					end: node.end,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
 			SvelteElement(node, { visit }) {
-				/** @type {import('estree').Expression | string} */
+				/** @type {Expression | string} */
 				let tag = node.tag;
-				if (tag.type === 'Literal' && typeof tag.value === 'string') {
+				if (
+					tag.type === 'Literal' &&
+					typeof tag.value === 'string' &&
+					source[/** @type {number} */ (node.tag.start) - 1] !== '{'
+				) {
 					tag = tag.value;
 				}
 
@@ -462,11 +528,10 @@ export function convert(source, ast) {
 					start: node.start,
 					end: node.end,
 					attributes: node.attributes.map(
-						(a) => /** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(a))
+						(a) => /** @type {Legacy.LegacyAttributeLike} */ (visit(a))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
@@ -477,12 +542,10 @@ export function convert(source, ast) {
 					start: node.start,
 					end: node.end,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
@@ -493,8 +556,7 @@ export function convert(source, ast) {
 					start: node.start,
 					end: node.end,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					)
 				};
 			},
@@ -505,12 +567,10 @@ export function convert(source, ast) {
 					start: node.start,
 					end: node.end,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
@@ -521,12 +581,10 @@ export function convert(source, ast) {
 					start: node.start,
 					end: node.end,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},
@@ -534,7 +592,7 @@ export function convert(source, ast) {
 				const parent = path.at(-1);
 				if (parent?.type === 'RegularElement' && parent.name === 'style') {
 					// these text nodes are missing `raw` for some dumb reason
-					return /** @type {import('./types/template.js').Text} */ ({
+					return /** @type {AST.Text} */ ({
 						type: 'Text',
 						start: node.start,
 						end: node.end,
@@ -549,12 +607,10 @@ export function convert(source, ast) {
 					start: node.start,
 					end: node.end,
 					attributes: node.attributes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyAttributeLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyAttributeLike} */ (visit(child))
 					),
 					children: node.fragment.nodes.map(
-						(child) =>
-							/** @type {import('./types/legacy-nodes.js').LegacyElementLike} */ (visit(child))
+						(child) => /** @type {Legacy.LegacyElementLike} */ (visit(child))
 					)
 				};
 			},

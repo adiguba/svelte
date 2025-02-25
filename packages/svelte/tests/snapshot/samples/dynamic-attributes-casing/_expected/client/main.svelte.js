@@ -1,48 +1,34 @@
-// main.svelte (Svelte VERSION)
-// Note: compiler output will change before 5.0 is released!
-import "svelte/internal/disclose-version";
-import * as $ from "svelte/internal";
+import 'svelte/internal/disclose-version';
+import * as $ from 'svelte/internal/client';
 
-var frag = $.template(`<div></div> <svg></svg> <custom-element></custom-element> <div></div> <svg></svg> <custom-element></custom-element>`, true);
+var root = $.template(`<div></div> <svg></svg> <custom-element></custom-element> <div></div> <svg></svg> <custom-element></custom-element>`, 3);
 
-export default function Main($$anchor, $$props) {
-	$.push($$props, true);
-
+export default function Main($$anchor) {
 	// needs to be a snapshot test because jsdom does auto-correct the attribute casing
 	let x = 'test';
 	let y = () => 'test';
-	/* Init */
-	var fragment = $.open_frag($$anchor, false, frag);
-	var node = $.child_frag(fragment);
-	var svg = $.sibling($.sibling(node));
-	var custom_element = $.sibling($.sibling(svg));
-	var div = $.sibling($.sibling(custom_element));
-	var svg_1 = $.sibling($.sibling(div));
-	var custom_element_1 = $.sibling($.sibling(svg_1));
+	var fragment = root();
+	var div = $.first_child(fragment);
+	var svg = $.sibling(div, 2);
+	var custom_element = $.sibling(svg, 2);
 
-	/* Update */
-	$.attr_effect(div, "foobar", y);
-	$.attr_effect(svg_1, "viewBox", y);
-	$.set_custom_element_data_effect(custom_element_1, "fooBar", y);
+	$.template_effect(() => $.set_custom_element_data(custom_element, 'fooBar', x));
 
-	var node_foobar;
-	var svg_viewBox;
-	var custom_element_fooBar;
+	var div_1 = $.sibling(custom_element, 2);
+	var svg_1 = $.sibling(div_1, 2);
+	var custom_element_1 = $.sibling(svg_1, 2);
 
-	$.render_effect(() => {
-		if (node_foobar !== (node_foobar = x)) {
-			$.attr(node, "foobar", node_foobar);
-		}
+	$.template_effect(() => $.set_custom_element_data(custom_element_1, 'fooBar', y()));
 
-		if (svg_viewBox !== (svg_viewBox = x)) {
-			$.attr(svg, "viewBox", svg_viewBox);
-		}
+	$.template_effect(
+		($0) => {
+			$.set_attribute(div, 'foobar', x);
+			$.set_attribute(svg, 'viewBox', x);
+			$.set_attribute(div_1, 'foobar', $0);
+			$.set_attribute(svg_1, 'viewBox', $0);
+		},
+		[y]
+	);
 
-		if (custom_element_fooBar !== (custom_element_fooBar = x)) {
-			$.set_custom_element_data(custom_element, "fooBar", custom_element_fooBar);
-		}
-	});
-
-	$.close_frag($$anchor, fragment);
-	$.pop();
+	$.append($$anchor, fragment);
 }

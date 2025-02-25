@@ -2,7 +2,7 @@
 	let foo;
 </script>
 
-<button tabindex='-1'/>
-<button tabindex='0'/>
-<button tabindex='1'/>
-<button tabindex='{foo}'/>
+<button tabindex='-1'>click me</button>
+<button tabindex='0'>click me</button>
+<button tabindex='1'>click me</button>
+<button tabindex='{foo}'>click me</button>

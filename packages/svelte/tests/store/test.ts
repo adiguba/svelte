@@ -1,5 +1,17 @@
 import { describe, it, assert } from 'vitest';
-import { readable, writable, derived, get, readonly, type Readable } from 'svelte/store';
+import {
+	readable,
+	writable,
+	derived,
+	get,
+	readonly,
+	toStore,
+	type Readable,
+	fromStore
+} from 'svelte/store';
+import { source, set } from '../../src/internal/client/reactivity/sources';
+import * as $ from '../../src/internal/client/runtime';
+import { effect_root, render_effect } from 'svelte/internal/client';
 
 describe('writable', () => {
 	it('creates a writable store', () => {
@@ -229,7 +241,6 @@ describe('derived', () => {
 	it('maps a single store', () => {
 		const a = writable(1);
 
-		// @ts-expect-error TODO feels like inference should work here
 		const b = derived(a, (n) => n * 2);
 
 		const values: number[] = [];
@@ -251,7 +262,6 @@ describe('derived', () => {
 		const a = writable(2);
 		const b = writable(3);
 
-		// @ts-expect-error TODO feels like inference should work here
 		const c = derived([a, b], ([a, b]) => a * b);
 
 		const values: number[] = [];
@@ -274,7 +284,6 @@ describe('derived', () => {
 		const number = writable(1);
 		const evens = derived(
 			number,
-			// @ts-expect-error TODO feels like inference should work here
 			(n, set) => {
 				if (n % 2 === 0) set(n);
 			},
@@ -305,10 +314,8 @@ describe('derived', () => {
 		const number = writable(1);
 		const evensAndSquaresOf4 = derived(
 			number,
-			// @ts-expect-error TODO feels like inference should work here
 			(n, set, update) => {
 				if (n % 2 === 0) set(n);
-				// @ts-expect-error TODO feels like inference should work here
 				if (n % 4 === 0) update((n) => n * n);
 			},
 			0
@@ -343,10 +350,8 @@ describe('derived', () => {
 	it('prevents glitches', () => {
 		const lastname = writable('Jekyll');
 
-		// @ts-expect-error TODO feels like inference should work here
 		const firstname = derived(lastname, (n) => (n === 'Jekyll' ? 'Henry' : 'Edward'));
 
-		// @ts-expect-error TODO feels like inference should work here
 		const fullname = derived([firstname, lastname], (names) => names.join(' '));
 
 		const values: string[] = [];
@@ -367,17 +372,14 @@ describe('derived', () => {
 
 		const values: string[] = [];
 
-		// @ts-expect-error TODO feels like inference should work here
 		const a = derived(count, ($count) => {
 			return 'a' + $count;
 		});
 
-		// @ts-expect-error TODO feels like inference should work here
 		const b = derived(count, ($count) => {
 			return 'b' + $count;
 		});
 
-		// @ts-expect-error TODO feels like inference should work here
 		const combined = derived([a, b], ([a, b]) => {
 			return a + b;
 		});
@@ -399,12 +401,10 @@ describe('derived', () => {
 
 		const values: string[] = [];
 
-		// @ts-expect-error TODO feels like inference should work here
 		const a = derived(root, ($root) => {
 			return 'a' + $root.a;
 		});
 
-		// @ts-expect-error TODO feels like inference should work here
 		const b = derived([a, root], ([$a, $root]) => {
 			return 'b' + $root.b + $a;
 		});
@@ -426,7 +426,6 @@ describe('derived', () => {
 
 		const number = writable(1);
 
-		// @ts-expect-error TODO feels like inference should work here
 		const numbers = derived(number, ($number) => {
 			arr[0] = $number;
 			return arr;
@@ -452,7 +451,6 @@ describe('derived', () => {
 		const values: number[] = [];
 		const cleaned_up: number[] = [];
 
-		// @ts-expect-error TODO feels like inference should work here
 		const d = derived(num, ($num, set) => {
 			set($num * 2);
 
@@ -507,7 +505,6 @@ describe('derived', () => {
 		const a = writable('one');
 		const b = writable(1);
 
-		// @ts-expect-error TODO feels like inference should work here
 		const c = derived([a, b], ([a, b]) => `${a} ${b}`);
 
 		assert.deepEqual(get(c), 'one 1');
@@ -527,7 +524,6 @@ describe('derived', () => {
 		const a = writable(true);
 		let b_started = false;
 
-		// @ts-expect-error TODO feels like inference should work here
 		const b = derived(a, (_, __) => {
 			b_started = true;
 			return () => {
@@ -536,7 +532,6 @@ describe('derived', () => {
 			};
 		});
 
-		// @ts-expect-error TODO feels like inference should work here
 		const c = derived(a, ($a, set) => {
 			if ($a) return b.subscribe(set);
 		});
@@ -589,5 +584,126 @@ describe('readonly', () => {
 
 		// @ts-ignore
 		assert.throws(() => readableStore.set(3));
+	});
+});
+
+describe('toStore', () => {
+	it('creates a readable store from state', () => {
+		const count = source(0);
+
+		const store = toStore(() => $.get(count));
+
+		const log: number[] = [];
+
+		const unsubscribe = store.subscribe((value) => {
+			log.push(value);
+		});
+
+		assert.deepEqual(log, [0]);
+
+		set(count, 1);
+		$.flushSync();
+		assert.deepEqual(log, [0, 1]);
+
+		unsubscribe();
+	});
+
+	it('creates a writable store from state', () => {
+		const count = source(0);
+
+		const store = toStore(
+			() => $.get(count),
+			(v) => set(count, v)
+		);
+
+		const log: number[] = [];
+
+		const unsubscribe = store.subscribe((value) => {
+			log.push(value);
+		});
+
+		assert.deepEqual(log, [0]);
+
+		set(count, 1);
+		$.flushSync();
+		assert.deepEqual(log, [0, 1]);
+
+		store.set(2);
+		assert.equal($.get(count), 2);
+
+		unsubscribe();
+	});
+});
+
+describe('fromStore', () => {
+	it('creates state from a writable store', () => {
+		const store = writable(0);
+
+		const count = fromStore(store);
+
+		assert.equal(count.current, 0);
+
+		const log: number[] = [];
+
+		const teardown = effect_root(() => {
+			render_effect(() => {
+				log.push(count.current);
+			});
+		});
+
+		assert.deepEqual(log, [0]);
+
+		store.set(1);
+		$.flushSync();
+		assert.deepEqual(log, [0, 1]);
+
+		count.current = 2;
+		$.flushSync();
+		assert.deepEqual(log, [0, 1, 2]);
+
+		assert.equal(get(store), 2);
+
+		teardown();
+	});
+
+	it('creates state from a writable store that updates after timeout', async () => {
+		const wait = () => new Promise((resolve) => setTimeout(resolve, 100));
+		const store = {
+			subscribe: (cb: any) => {
+				// new object each time to force updates of underlying signals,
+				// to test the whole thing doesn't rerun more often than it should
+				setTimeout(() => cb({}), 0);
+				return () => {};
+			}
+		};
+
+		const count = fromStore(store);
+		const log: any[] = [];
+
+		const teardown = effect_root(() => {
+			render_effect(() => {
+				log.push(count.current);
+			});
+		});
+
+		await wait();
+
+		assert.deepEqual(log, [undefined, {}]);
+
+		teardown();
+	});
+
+	it('creates state from a readable store', () => {
+		const store = readable(0);
+
+		const count = fromStore(store);
+
+		assert.equal(count.current, 0);
+
+		assert.throws(
+			// @ts-expect-error property is readonly
+			() => (count.current += 1),
+			'Cannot set property current of #<Object> which has only a getter'
+		);
 	});
 });

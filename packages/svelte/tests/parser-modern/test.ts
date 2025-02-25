@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import { assert } from 'vitest';
+import { assert, it } from 'vitest';
 import { parse } from 'svelte/compiler';
 import { try_load_json } from '../helpers.js';
 import { suite, type BaseTest } from '../suite.js';
@@ -15,7 +15,8 @@ const { test, run } = suite<ParserTest>(async (config, cwd) => {
 	const actual = JSON.parse(
 		JSON.stringify(
 			parse(input, {
-				modern: true
+				modern: true,
+				loose: cwd.split('/').pop()!.startsWith('loose-')
 			})
 		)
 	);
@@ -34,3 +35,24 @@ const { test, run } = suite<ParserTest>(async (config, cwd) => {
 export { test };
 
 await run(__dirname);
+
+it('Strips BOM from the input', () => {
+	const input = '\uFEFF<div></div>';
+	const actual = parse(input, { modern: true });
+	assert.deepEqual(JSON.parse(JSON.stringify(actual.fragment)), {
+		type: 'Fragment',
+		nodes: [
+			{
+				attributes: [],
+				end: 11,
+				fragment: {
+					nodes: [],
+					type: 'Fragment'
+				},
+				name: 'div',
+				start: 0,
+				type: 'RegularElement'
+			}
+		]
+	});
+});

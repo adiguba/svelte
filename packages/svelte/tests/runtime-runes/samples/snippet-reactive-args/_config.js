@@ -1,3 +1,4 @@
+import { flushSync } from 'svelte';
 import { test } from '../../test';
 
 export default test({
@@ -6,16 +7,14 @@ export default test({
 		<button>toggle</button>
 		<button>increase count</button>
 	`,
-	props: {
-		get log() {
-			return [];
-		}
-	},
 
-	async test({ assert, target, component }) {
+	test({ assert, target, logs }) {
 		const [toggle, increment] = target.querySelectorAll('button');
 
-		await increment?.click();
+		flushSync(() => {
+			increment?.click();
+		});
+
 		assert.htmlEqual(
 			target.innerHTML,
 			`
@@ -24,9 +23,12 @@ export default test({
 				<button>increase count</button>
 			`
 		);
-		assert.deepEqual(component.log, []);
+		assert.deepEqual(logs, []);
 
-		await toggle?.click();
+		flushSync(() => {
+			toggle?.click();
+		});
+
 		assert.htmlEqual(
 			target.innerHTML,
 			`
@@ -35,9 +37,12 @@ export default test({
 				<button>increase count</button>
 			`
 		);
-		assert.deepEqual(component.log, [1]);
+		assert.deepEqual(logs, [1]);
 
-		await increment?.click();
+		flushSync(() => {
+			increment?.click();
+		});
+
 		assert.htmlEqual(
 			target.innerHTML,
 			`
@@ -46,9 +51,12 @@ export default test({
 				<button>increase count</button>
 			`
 		);
-		assert.deepEqual(component.log, [1]);
+		assert.deepEqual(logs, [1]);
 
-		await toggle?.click();
+		flushSync(() => {
+			toggle?.click();
+		});
+
 		assert.htmlEqual(
 			target.innerHTML,
 			`
@@ -57,6 +65,6 @@ export default test({
 				<button>increase count</button>
 			`
 		);
-		assert.deepEqual(component.log, [1]);
+		assert.deepEqual(logs, [1]);
 	}
 });

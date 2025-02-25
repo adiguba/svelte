@@ -4,21 +4,21 @@
 
 <style>
 	.d + .e { color: green; }
+	.a + .b { color: green; }
 
 	/* no match */
-	.a + .b { color: green; }
-	.b + .c { color: green; }
-	.c + .f { color: green; }
+	.b + .c { color: red; }
+	.c + .f { color: red; }
 </style>
 
-<div class="a" />
+<div class="a"></div>
 <App>
-	<div class="b" slot="a" />
+	<div class="b" slot="a"></div>
 
 	<div class="c" slot="b">
-		<div class="d" />
-		<div class="e" />
+		<div class="d"></div>
+		<div class="e"></div>
 	</div>
 </App>
 
-<div class="f" />
+<div class="f"></div>

@@ -14,7 +14,7 @@ There are many ways to contribute to Svelte, and many of them do not involve wri
 - Simply start using Svelte. Go through the [Getting Started](https://svelte.dev/docs#getting-started) guide. Does everything work as expected? If not, we're always looking for improvements. Let us know by [opening an issue](#reporting-new-issues).
 - Look through the [open issues](https://github.com/sveltejs/svelte/issues). A good starting point would be issues tagged [good first issue](https://github.com/sveltejs/svelte/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). Provide workarounds, ask for clarification, or suggest labels. Help [triage issues](#triaging-issues-and-pull-requests).
 - If you find an issue you would like to fix, [open a pull request](#pull-requests).
-- Read through our [tutorials](https://learn.svelte.dev/). If you find anything that is confusing or can be improved, you can make edits by clicking "Edit this page" at the bottom left of the tutorial page.
+- Read through our [tutorials](https://svelte.dev/tutorial). If you find anything that is confusing or can be improved, you can make edits by clicking "Edit this page" at the bottom left of the tutorial page.
 - Take a look at the [features requested](https://github.com/sveltejs/svelte/labels/feature%20request) by others in the community and consider opening a pull request if you see something you want to work on.
 
 Contributions are very welcome. If you think you need help planning your contribution, please ping us on Discord at [svelte.dev/chat](https://svelte.dev/chat) and let us know you are looking for a bit of help.
@@ -51,7 +51,7 @@ We use [GitHub issues](https://github.com/sveltejs/svelte/issues) for our public
 
 If you have questions about using Svelte, contact us on Discord at [svelte.dev/chat](https://svelte.dev/chat), and we will do our best to answer your questions.
 
-If you see anything you'd like to be implemented, create a [feature request issue](https://github.com/sveltejs/svelte/issues/new?template=feature_request.md)
+If you see anything you'd like to be implemented, create a [feature request issue](https://github.com/sveltejs/svelte/issues/new?template=feature_request.yml).
 
 ### Reporting new issues
 
@@ -61,8 +61,6 @@ When [opening a new issue](https://github.com/sveltejs/svelte/issues/new/choose)
 - **Provide reproduction steps:** List all the steps necessary to reproduce the issue. The person reading your bug report should be able to follow these steps to reproduce your issue with minimal effort. If possible, use the [REPL](https://svelte.dev/repl) to create your reproduction.
 
 ## Pull requests
-
-> HEADS UP: Svelte 5 will likely change a lot on the compiler. For that reason, please don't open PRs that are large in scope, touch more than a couple of files etc. In other words, bug fixes are fine, but big feature PRs will likely not be merged.
 
 ### Proposing a change
 
@@ -133,6 +131,10 @@ To typecheck the codebase, run `pnpm check` inside `packages/svelte`. To typeche
 - `snake_case` for internal variable names and methods.
 - `camelCase` for public variable names and methods.
 
+### Generating types
+
+Types are auto-generated from the source, but the result is checked in to ensure no accidental changes slip through. Run `pnpm generate:types` to regenerate the types.
+
 ### Sending your pull request
 
 Please make sure the following is done when submitting a pull request:
@@ -141,7 +143,7 @@ Please make sure the following is done when submitting a pull request:
 1. Make sure your code lints (`pnpm lint`).
 1. Make sure your tests pass (`pnpm test`).
 
-All pull requests should be opened against the `main` branch. Make sure the PR does only one thing, otherwise please split it.
+All pull requests should be opened against the `main` branch. Make sure the PR does only one thing, otherwise please split it. If this change should contribute to a version bump, run `npx changeset` at the root of the repository after a code change and select the appropriate packages.
 
 #### Breaking changes
 
@@ -155,6 +157,10 @@ When adding a new breaking change, follow this template in your pull request:
 - **Why make this breaking change**:
 - **Severity (number of people affected x effort)**:
 ```
+
+### Reviewing pull requests
+
+If you'd like to manually test a pull request in another pnpm project, you can do so by running `pnpm add -D "github:sveltejs/svelte#path:packages/svelte&branch-name"` in that project.
 
 ## License
 

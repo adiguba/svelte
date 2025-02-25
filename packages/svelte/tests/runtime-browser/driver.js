@@ -5,6 +5,7 @@ import config from '__CONFIG__';
 // @ts-expect-error
 import * as assert from 'assert.js';
 import { createClassComponent } from 'svelte/legacy';
+import { flushSync } from 'svelte';
 
 /** @param {HTMLElement} target */
 export default async function (target) {
@@ -24,12 +25,14 @@ export default async function (target) {
 				component: SvelteComponent,
 				target,
 				props: config.props,
-				intro: config.intro
+				intro: config.intro,
+				hydrate: __HYDRATE__,
+				recover: false
 			},
 			config.options || {}
 		);
 
-		const component = createClassComponent(options);
+		const component = __CE_TEST__ ? null : createClassComponent(options);
 
 		/**
 		 * @param {() => boolean} fn
@@ -43,6 +46,8 @@ export default async function (target) {
 			} while (new Date().getTime() <= start + ms);
 		};
 
+		flushSync();
+
 		if (config.html) {
 			assert.htmlEqual(target.innerHTML, config.html);
 		}
@@ -50,14 +55,19 @@ export default async function (target) {
 		if (config.test) {
 			await config.test({
 				assert,
-				component,
+				get component() {
+					if (!component) {
+						throw new Error('test property `component` is not available in custom element tests');
+					}
+					return component;
+				},
 				componentCtor: SvelteComponent,
 				target,
 				window,
 				waitUntil: wait_until
 			});
 
-			component.$destroy();
+			component?.$destroy();
 
 			if (unhandled_rejection) {
 				throw unhandled_rejection;

@@ -1,39 +1,13 @@
-import type {
-	Expression,
-	Identifier,
-	Statement,
-	ModuleDeclaration,
-	LabeledStatement
-} from 'estree';
-import type { SvelteNode, Namespace, ValidatedCompileOptions } from '#compiler';
+import type { Expression, Statement, ModuleDeclaration, LabeledStatement } from 'estree';
+import type { AST, Namespace, ValidatedCompileOptions } from '#compiler';
 import type { TransformState } from '../types.js';
 import type { ComponentAnalysis } from '../../types.js';
-
-export type TemplateExpression = {
-	type: 'expression';
-	value: Expression;
-};
-
-export type TemplateString = {
-	type: 'string';
-	value: string;
-};
-
-export type TemplateStatement = {
-	type: 'statement';
-	value: Statement;
-};
-
-export type Template = TemplateExpression | TemplateString | TemplateStatement;
-
-export interface Anchor {
-	type: 'Anchor';
-	id: Identifier;
-}
+import type { StateField } from '../client/types.js';
 
 export interface ServerTransformState extends TransformState {
 	/** The $: calls, which will be ordered in the end */
 	readonly legacy_reactive_statements: Map<LabeledStatement, Statement>;
+	readonly private_derived: Map<string, StateField>;
 }
 
 export interface ComponentServerTransformState extends ServerTransformState {
@@ -45,21 +19,20 @@ export interface ComponentServerTransformState extends ServerTransformState {
 	readonly hoisted: Array<Statement | ModuleDeclaration>;
 
 	/** The SSR template  */
-	readonly template: Template[];
-	readonly metadata: {
-		namespace: Namespace;
-	};
+	readonly template: Array<Statement | Expression>;
+	readonly namespace: Namespace;
 	readonly preserve_whitespace: boolean;
+	readonly skip_hydration_boundaries: boolean;
 }
 
-export type Context = import('zimmerframe').Context<SvelteNode, ServerTransformState>;
-export type Visitors = import('zimmerframe').Visitors<SvelteNode, ServerTransformState>;
+export type Context = import('zimmerframe').Context<AST.SvelteNode, ServerTransformState>;
+export type Visitors = import('zimmerframe').Visitors<AST.SvelteNode, ServerTransformState>;
 
 export type ComponentContext = import('zimmerframe').Context<
-	SvelteNode,
+	AST.SvelteNode,
 	ComponentServerTransformState
 >;
 export type ComponentVisitors = import('zimmerframe').Visitors<
-	SvelteNode,
+	AST.SvelteNode,
 	ComponentServerTransformState
 >;

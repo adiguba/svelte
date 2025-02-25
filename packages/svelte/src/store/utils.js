@@ -1,8 +1,10 @@
-import { EMPTY_FUNC } from '../internal/common.js';
+/** @import { Readable } from './public' */
+import { untrack } from '../index-client.js';
+import { noop } from '../internal/shared/utils.js';
 
 /**
  * @template T
- * @param {import('./public').Readable<T> | null | undefined} store
+ * @param {Readable<T> | null | undefined} store
  * @param {(value: T) => void} run
  * @param {(value: T) => void} [invalidate]
  * @returns {() => void}
@@ -15,14 +17,17 @@ export function subscribe_to_store(store, run, invalidate) {
 		// @ts-expect-error
 		if (invalidate) invalidate(undefined);
 
-		return EMPTY_FUNC;
+		return noop;
 	}
 
 	// Svelte store takes a private second argument
-	const unsub = store.subscribe(
-		run,
-		// @ts-expect-error
-		invalidate
+	// StartStopNotifier could mutate state, and we want to silence the corresponding validation error
+	const unsub = untrack(() =>
+		store.subscribe(
+			run,
+			// @ts-expect-error
+			invalidate
+		)
 	);
 
 	// Also support RxJS

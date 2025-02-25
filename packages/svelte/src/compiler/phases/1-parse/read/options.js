@@ -1,16 +1,19 @@
-import { error } from '../../../errors.js';
-
-const regex_valid_tag_name = /^[a-zA-Z][a-zA-Z0-9]*-[a-zA-Z0-9-]+$/;
+/** @import { ObjectExpression } from 'estree' */
+/** @import { AST } from '#compiler' */
+import { NAMESPACE_MATHML, NAMESPACE_SVG } from '../../../../constants.js';
+import * as e from '../../../errors.js';
 
 /**
- * @param {import('#compiler').SvelteOptionsRaw} node
- * @returns {import('#compiler').Root['options']}
+ * @param {AST.SvelteOptionsRaw} node
+ * @returns {AST.Root['options']}
  */
 export default function read_options(node) {
-	/** @type {import('#compiler').SvelteOptions} */
+	/** @type {AST.SvelteOptions} */
 	const component_options = {
 		start: node.start,
-		end: node.end
+		end: node.end,
+		// @ts-ignore
+		attributes: node.attributes
 	};
 
 	if (!node) {
@@ -19,41 +22,41 @@ export default function read_options(node) {
 
 	for (const attribute of node.attributes) {
 		if (attribute.type !== 'Attribute') {
-			error(attribute, 'invalid-svelte-option-attribute');
+			e.svelte_options_invalid_attribute(attribute);
 		}
 
 		const { name } = attribute;
 
 		switch (name) {
 			case 'runes': {
-				const value = get_static_value(attribute, () =>
-					error(attribute, 'invalid-svelte-option-runes')
-				);
-				if (typeof value !== 'boolean') {
-					error(attribute, 'invalid-svelte-option-runes');
-				}
-				component_options.runes = value;
+				component_options.runes = get_boolean_value(attribute);
 				break;
 			}
 			case 'tag': {
-				error(attribute, 'tag-option-deprecated');
+				e.svelte_options_deprecated_tag(attribute);
 				break; // eslint doesn't know this is unnecessary
 			}
 			case 'customElement': {
-				/** @type {import('#compiler').SvelteOptions['customElement']} */
-				const ce = { tag: '' };
+				/** @type {AST.SvelteOptions['customElement']} */
+				const ce = {};
+				const { value: v } = attribute;
+				const value = v === true || Array.isArray(v) ? v : [v];
 
-				const { value } = attribute;
 				if (value === true) {
-					error(attribute, 'invalid-svelte-option-customElement');
+					e.svelte_options_invalid_customelement(attribute);
 				} else if (value[0].type === 'Text') {
-					const tag = get_static_value(attribute, () => error(attribute, 'invalid-tag-property'));
+					const tag = get_static_value(attribute);
 					validate_tag(attribute, tag);
 					ce.tag = tag;
 					component_options.customElement = ce;
 					break;
 				} else if (value[0].expression.type !== 'ObjectExpression') {
-					error(attribute, 'invalid-svelte-option-customElement');
+					// Before Svelte 4 it was necessary to explicitly set customElement to null or else you'd get a warning.
+					// This is no longer necessary, but for backwards compat just skip in this case now.
+					if (value[0].expression.type === 'Literal' && value[0].expression.value === null) {
+						break;
+					}
+					e.svelte_options_invalid_customelement(attribute);
 				}
 
 				/** @type {Array<[string, any]>} */
@@ -64,7 +67,7 @@ export default function read_options(node) {
 						property.computed ||
 						property.key.type !== 'Identifier'
 					) {
-						error(attribute, 'invalid-svelte-option-customElement');
+						e.svelte_options_invalid_customelement(attribute);
 					}
 					properties.push([property.key.name, property.value]);
 				}
@@ -74,25 +77,22 @@ export default function read_options(node) {
 					const tag_value = tag[1]?.value;
 					validate_tag(tag, tag_value);
 					ce.tag = tag_value;
-				} else {
-					error(attribute, 'invalid-svelte-option-customElement');
 				}
 
 				const props = properties.find(([name]) => name === 'props')?.[1];
 				if (props) {
 					if (props.type !== 'ObjectExpression') {
-						error(attribute, 'invalid-customElement-props-attribute');
+						e.svelte_options_invalid_customelement_props(attribute);
 					}
 					ce.props = {};
-					for (const property of /** @type {import('estree').ObjectExpression} */ (props)
-						.properties) {
+					for (const property of /** @type {ObjectExpression} */ (props).properties) {
 						if (
 							property.type !== 'Property' ||
 							property.computed ||
 							property.key.type !== 'Identifier' ||
 							property.value.type !== 'ObjectExpression'
 						) {
-							error(attribute, 'invalid-customElement-props-attribute');
+							e.svelte_options_invalid_customelement_props(attribute);
 						}
 						ce.props[property.key.name] = {};
 						for (const prop of property.value.properties) {
@@ -102,7 +102,7 @@ export default function read_options(node) {
 								prop.key.type !== 'Identifier' ||
 								prop.value.type !== 'Literal'
 							) {
-								error(attribute, 'invalid-customElement-props-attribute');
+								e.svelte_options_invalid_customelement_props(attribute);
 							}
 
 							if (prop.key.name === 'type') {
@@ -111,21 +111,21 @@ export default function read_options(node) {
 										/** @type {string} */ (prop.value.value)
 									) === -1
 								) {
-									error(attribute, 'invalid-customElement-props-attribute');
+									e.svelte_options_invalid_customelement_props(attribute);
 								}
 								ce.props[property.key.name].type = /** @type {any} */ (prop.value.value);
 							} else if (prop.key.name === 'reflect') {
 								if (typeof prop.value.value !== 'boolean') {
-									error(attribute, 'invalid-customElement-props-attribute');
+									e.svelte_options_invalid_customelement_props(attribute);
 								}
 								ce.props[property.key.name].reflect = prop.value.value;
 							} else if (prop.key.name === 'attribute') {
 								if (typeof prop.value.value !== 'string') {
-									error(attribute, 'invalid-customElement-props-attribute');
+									e.svelte_options_invalid_customelement_props(attribute);
 								}
 								ce.props[property.key.name].attribute = prop.value.value;
 							} else {
-								error(attribute, 'invalid-customElement-props-attribute');
+								e.svelte_options_invalid_customelement_props(attribute);
 							}
 						}
 					}
@@ -135,7 +135,7 @@ export default function read_options(node) {
 				if (shadow) {
 					const shadowdom = shadow?.value;
 					if (shadowdom !== 'open' && shadowdom !== 'none') {
-						error(shadow, 'invalid-customElement-shadow-attribute');
+						e.svelte_options_invalid_customelement_shadow(shadow);
 					}
 					ce.shadow = shadowdom;
 				}
@@ -149,55 +149,45 @@ export default function read_options(node) {
 				break;
 			}
 			case 'namespace': {
-				const value = get_static_value(attribute, () =>
-					error(attribute, 'invalid-svelte-option-namespace')
-				);
-				if (typeof value !== 'string') {
-					error(attribute, 'invalid-svelte-option-namespace');
-				}
+				const value = get_static_value(attribute);
 
-				if (value === 'http://www.w3.org/2000/svg') {
+				if (value === NAMESPACE_SVG) {
 					component_options.namespace = 'svg';
-				} else if (value === 'html' || value === 'svg' || value === 'foreign') {
+				} else if (value === NAMESPACE_MATHML) {
+					component_options.namespace = 'mathml';
+				} else if (value === 'html' || value === 'mathml' || value === 'svg') {
 					component_options.namespace = value;
 				} else {
-					error(attribute, 'invalid-svelte-option-namespace');
+					e.svelte_options_invalid_attribute_value(attribute, `"html", "mathml" or "svg"`);
+				}
+
+				break;
+			}
+			case 'css': {
+				const value = get_static_value(attribute);
+
+				if (value === 'injected') {
+					component_options.css = value;
+				} else {
+					e.svelte_options_invalid_attribute_value(attribute, `"injected"`);
 				}
 
 				break;
 			}
 			case 'immutable': {
-				const value = get_static_value(attribute, () =>
-					error(attribute, 'invalid-svelte-option-immutable')
-				);
-				if (typeof value !== 'boolean') {
-					error(attribute, 'invalid-svelte-option-immutable');
-				}
-				component_options.immutable = value;
+				component_options.immutable = get_boolean_value(attribute);
 				break;
 			}
 			case 'preserveWhitespace': {
-				const value = get_static_value(attribute, () =>
-					error(attribute, 'invalid-svelte-option-preserveWhitespace')
-				);
-				if (typeof value !== 'boolean') {
-					error(attribute, 'invalid-svelte-option-preserveWhitespace');
-				}
-				component_options.preserveWhitespace = value;
+				component_options.preserveWhitespace = get_boolean_value(attribute);
 				break;
 			}
 			case 'accessors': {
-				const value = get_static_value(attribute, () =>
-					error(attribute, 'invalid-svelte-option-accessors')
-				);
-				if (typeof value !== 'boolean') {
-					error(attribute, 'invalid-svelte-option-accessors');
-				}
-				component_options.accessors = value;
+				component_options.accessors = get_boolean_value(attribute);
 				break;
 			}
 			default:
-				error(attribute, 'unknown-svelte-option-attribute', name);
+				e.svelte_options_unknown_attribute(attribute, name);
 		}
 	}
 
@@ -206,36 +196,66 @@ export default function read_options(node) {
 
 /**
  * @param {any} attribute
- * @param {(attribute: any) => never} error
  */
-function get_static_value(attribute, error) {
+function get_static_value(attribute) {
 	const { value } = attribute;
-	const chunk = value[0];
+
+	if (value === true) return true;
+
+	const chunk = Array.isArray(value) ? value[0] : value;
+
 	if (!chunk) return true;
 	if (value.length > 1) {
-		error(attribute);
+		return null;
 	}
 	if (chunk.type === 'Text') return chunk.data;
 	if (chunk.expression.type !== 'Literal') {
-		error(attribute);
+		return null;
 	}
+
 	return chunk.expression.value;
 }
 
 /**
  * @param {any} attribute
- * @param {string} tag
+ */
+function get_boolean_value(attribute) {
+	const value = get_static_value(attribute);
+	if (typeof value !== 'boolean') {
+		e.svelte_options_invalid_attribute_value(attribute, 'true or false');
+	}
+	return value;
+}
+
+// https://html.spec.whatwg.org/multipage/custom-elements.html#valid-custom-element-name
+const tag_name_char =
+	'[a-z0-9_.\xB7\xC0-\xD6\xD8-\xF6\xF8-\u037D\u037F-\u1FFF\u200C-\u200D\u203F-\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}-]';
+const regex_valid_tag_name = new RegExp(`^[a-z]${tag_name_char}*-${tag_name_char}*$`, 'u');
+const reserved_tag_names = [
+	'annotation-xml',
+	'color-profile',
+	'font-face',
+	'font-face-src',
+	'font-face-uri',
+	'font-face-format',
+	'font-face-name',
+	'missing-glyph'
+];
+
+/**
+ * @param {any} attribute
+ * @param {string | null} tag
  * @returns {asserts tag is string}
  */
 function validate_tag(attribute, tag) {
-	if (typeof tag !== 'string' && tag !== null) {
-		error(attribute, 'invalid-tag-property');
+	if (typeof tag !== 'string') {
+		e.svelte_options_invalid_tagname(attribute);
 	}
-	if (tag && !regex_valid_tag_name.test(tag)) {
-		error(attribute, 'invalid-tag-property');
+	if (tag) {
+		if (!regex_valid_tag_name.test(tag)) {
+			e.svelte_options_invalid_tagname(attribute);
+		} else if (reserved_tag_names.includes(tag)) {
+			e.svelte_options_reserved_tagname(attribute);
+		}
 	}
-	// TODO do we still need this?
-	// if (tag && !component.compile_options.customElement) {
-	// 	component.warn(attribute, compiler_warnings.missing_custom_element_compile_options);
-	// }
 }

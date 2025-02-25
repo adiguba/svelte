@@ -2,8 +2,8 @@ import { test } from '../../test';
 
 export default test({
 	error: {
-		code: 'duplicate-attribute',
+		code: 'attribute_duplicate',
 		message: 'Attributes need to be unique',
-		position: [17, 17]
+		position: [17, 24]
 	}
 });

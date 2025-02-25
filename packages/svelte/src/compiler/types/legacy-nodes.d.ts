@@ -1,4 +1,4 @@
-import type { StyleDirective as LegacyStyleDirective, Text } from '#compiler';
+import type { AST } from '#compiler';
 import type {
 	ArrayExpression,
 	AssignmentExpression,
@@ -6,7 +6,8 @@ import type {
 	Identifier,
 	MemberExpression,
 	ObjectExpression,
-	Pattern
+	Pattern,
+	SequenceExpression
 } from 'estree';
 
 interface BaseNode {
@@ -19,6 +20,13 @@ interface BaseElement extends BaseNode {
 	name: string;
 	attributes: Array<LegacyAttributeLike>;
 	children: Array<LegacyElementLike>;
+}
+
+export interface LegacyRoot extends BaseNode {
+	html: LegacySvelteNode;
+	css?: any;
+	instance?: any;
+	module?: any;
 }
 
 export interface LegacyAction extends BaseNode {
@@ -42,7 +50,7 @@ export interface LegacyBinding extends BaseNode {
 	/** The 'x' in `bind:x` */
 	name: string;
 	/** The y in `bind:x={y}` */
-	expression: Identifier | MemberExpression;
+	expression: Identifier | MemberExpression | SequenceExpression;
 }
 
 export interface LegacyBody extends BaseElement {
@@ -53,7 +61,7 @@ export interface LegacyBody extends BaseElement {
 export interface LegacyAttribute extends BaseNode {
 	type: 'Attribute';
 	name: string;
-	value: true | Array<Text | LegacyMustacheTag | LegacyAttributeShorthand>;
+	value: true | Array<AST.Text | LegacyMustacheTag | LegacyAttributeShorthand>;
 }
 
 export interface LegacyAttributeShorthand extends BaseNode {
@@ -187,8 +195,26 @@ export interface LegacyTransition extends BaseNode {
 	outro: boolean;
 }
 
+/** A `style:` directive */
+export interface LegacyStyleDirective extends BaseNode {
+	type: 'StyleDirective';
+	/** The 'x' in `style:x` */
+	name: string;
+	/** The 'y' in `style:x={y}` */
+	value: true | Array<AST.ExpressionTag | AST.Text>;
+	modifiers: Array<'important'>;
+}
+
 export interface LegacyWindow extends BaseElement {
 	type: 'Window';
+}
+
+export interface LegacyComment extends BaseNode {
+	type: 'Comment';
+	/** the contents of the comment */
+	data: string;
+	/** any svelte-ignore directives — <!-- svelte-ignore a b c --> would result in ['a', 'b', 'c'] */
+	ignores: string[];
 }
 
 type LegacyDirective =
@@ -206,6 +232,7 @@ export type LegacyAttributeLike = LegacyAttribute | LegacySpread | LegacyDirecti
 export type LegacyElementLike =
 	| LegacyBody
 	| LegacyCatchBlock
+	| LegacyComment
 	| LegacyDocument
 	| LegacyElement
 	| LegacyHead
@@ -220,9 +247,28 @@ export type LegacyElementLike =
 	| LegacyTitle
 	| LegacyWindow;
 
+export interface LegacyStyle extends BaseNode {
+	type: 'Style';
+	attributes: any[];
+	content: {
+		start: number;
+		end: number;
+		styles: string;
+	};
+	children: any[];
+}
+
+export interface LegacySelector extends BaseNode {
+	type: 'Selector';
+	children: Array<AST.CSS.Combinator | AST.CSS.SimpleSelector>;
+}
+
+export type LegacyCssNode = LegacyStyle | LegacySelector;
+
 export type LegacySvelteNode =
 	| LegacyConstTag
 	| LegacyElementLike
 	| LegacyAttributeLike
 	| LegacyAttributeShorthand
-	| Text;
+	| LegacyCssNode
+	| AST.Text;

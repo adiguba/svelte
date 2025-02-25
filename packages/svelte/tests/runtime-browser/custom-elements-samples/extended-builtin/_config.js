@@ -4,8 +4,9 @@ const tick = () => Promise.resolve();
 export default test({
 	warnings: [
 		{
-			code: 'avoid-is',
-			message: 'The "is" attribute is not supported cross-browser and should be avoided',
+			code: 'attribute_avoid_is',
+			message:
+				'The "is" attribute is not supported cross-browser and should be avoided\nhttps://svelte.dev/e/attribute_avoid_is',
 			start: {
 				character: 109,
 				column: 8,

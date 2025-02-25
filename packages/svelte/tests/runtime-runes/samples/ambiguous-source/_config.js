@@ -1,13 +1,13 @@
+import { flushSync } from 'svelte';
 import { test } from '../../test';
 
 export default test({
-	html: `<button>0</button>`,
+	html: `<button>0 / 0</button>`,
 
-	async test({ assert, target, window }) {
+	test({ assert, target }) {
 		const btn = target.querySelector('button');
-		const clickEvent = new window.Event('click', { bubbles: true });
-		await btn?.dispatchEvent(clickEvent);
-
-		assert.htmlEqual(target.innerHTML, `<button>1</button>`);
+		btn?.click();
+		flushSync();
+		assert.htmlEqual(target.innerHTML, `<button>1 / 1</button>`);
 	}
 });

@@ -1,17 +1,18 @@
+/** @import { AST } from '#compiler' */
 // @ts-expect-error acorn type definitions are borked in the release we use
 import { isIdentifierStart, isIdentifierChar } from 'acorn';
 import fragment from './state/fragment.js';
 import { regex_whitespace } from '../patterns.js';
-import { reserved } from './utils/names.js';
-import full_char_code_at from './utils/full_char_code_at.js';
-import { error } from '../../errors.js';
+import * as e from '../../errors.js';
 import { create_fragment } from './utils/create.js';
 import read_options from './read/options.js';
+import { is_reserved } from '../../../utils.js';
+import { disallow_children } from '../2-analyze/visitors/shared/special-element.js';
 
 const regex_position_indicator = / \(\d+:\d+\)$/;
 
 const regex_lang_attribute =
-	/<!--[^]*?-->|<script\s+(?:[^>]*|(?:[^=>'"/]+=(?:"[^"]*"|'[^']*'|[^>\s]+)\s+)*)lang=(["'])?([^"' >]+)\1[^>]*>/;
+	/<!--[^]*?-->|<script\s+(?:[^>]*|(?:[^=>'"/]+=(?:"[^"]*"|'[^']*'|[^>\s]+)\s+)*)lang=(["'])?([^"' >]+)\1[^>]*>/g;
 
 export class Parser {
 	/**
@@ -20,19 +21,32 @@ export class Parser {
 	 */
 	template;
 
+	/**
+	 * @readonly
+	 * @type {string}
+	 */
+	template_untrimmed;
+
+	/**
+	 * Whether or not we're in loose parsing mode, in which
+	 * case we try to continue parsing as much as possible
+	 * @type {boolean}
+	 */
+	loose;
+
 	/** */
 	index = 0;
 
 	/** Whether we're parsing in TypeScript mode */
 	ts = false;
 
-	/** @type {import('#compiler').TemplateNode[]} */
+	/** @type {AST.TemplateNode[]} */
 	stack = [];
 
-	/** @type {import('#compiler').Fragment[]} */
+	/** @type {AST.Fragment[]} */
 	fragments = [];
 
-	/** @type {import('#compiler').Root} */
+	/** @type {AST.Root} */
 	root;
 
 	/** @type {Record<string, boolean>} */
@@ -41,15 +55,27 @@ export class Parser {
 	/** @type {LastAutoClosedTag | undefined} */
 	last_auto_closed_tag;
 
-	/** @param {string} template */
-	constructor(template) {
+	/**
+	 * @param {string} template
+	 * @param {boolean} loose
+	 */
+	constructor(template, loose) {
 		if (typeof template !== 'string') {
 			throw new TypeError('Template must be a string');
 		}
 
-		this.template = template.trimRight();
+		this.loose = loose;
+		this.template_untrimmed = template;
+		this.template = template.trimEnd();
 
-		this.ts = regex_lang_attribute.exec(template)?.[2] === 'ts';
+		let match_lang;
+
+		do match_lang = regex_lang_attribute.exec(template);
+		while (match_lang && match_lang[0][1] !== 's'); // ensure it starts with '<s' to match script tags
+
+		regex_lang_attribute.lastIndex = 0; // reset matched index to pass tests - otherwise declare the regex inside the constructor
+
+		this.ts = match_lang?.[2] === 'ts';
 
 		this.root = {
 			css: null,
@@ -60,7 +86,10 @@ export class Parser {
 			end: null,
 			type: 'Root',
 			fragment: create_fragment(),
-			options: null
+			options: null,
+			metadata: {
+				ts: this.ts
+			}
 		};
 
 		this.stack.push(this.root);
@@ -76,17 +105,19 @@ export class Parser {
 		if (this.stack.length > 1) {
 			const current = this.current();
 
-			if (current.type === 'RegularElement') {
+			if (this.loose) {
+				current.end = this.template.length;
+			} else if (current.type === 'RegularElement') {
 				current.end = current.start + 1;
-				error(current, 'unclosed-element', current.name);
+				e.element_unclosed(current, current.name);
 			} else {
 				current.end = current.start + 1;
-				error(current, 'unclosed-block');
+				e.block_unclosed(current);
 			}
 		}
 
 		if (state !== fragment) {
-			error(this.index, 'unexpected-eof');
+			e.unexpected_eof(this.index);
 		}
 
 		if (this.root.fragment.nodes.length) {
@@ -110,11 +141,12 @@ export class Parser {
 			(thing) => thing.type === 'SvelteOptions'
 		);
 		if (options_index !== -1) {
-			const options = /** @type {import('#compiler').SvelteOptionsRaw} */ (
-				this.root.fragment.nodes[options_index]
-			);
+			const options = /** @type {AST.SvelteOptionsRaw} */ (this.root.fragment.nodes[options_index]);
 			this.root.fragment.nodes.splice(options_index, 1);
 			this.root.options = read_options(options);
+
+			disallow_children(options);
+
 			// We need this for the old AST format
 			Object.defineProperty(this.root.options, '__raw__', {
 				value: options,
@@ -132,25 +164,22 @@ export class Parser {
 	 * @returns {never}
 	 */
 	acorn_error(err) {
-		error(err.pos, 'js-parse-error', err.message.replace(regex_position_indicator, ''));
+		e.js_parse_error(err.pos, err.message.replace(regex_position_indicator, ''));
 	}
 
 	/**
 	 * @param {string} str
-	 * @param {boolean} [required]
+	 * @param {boolean} required
+	 * @param {boolean} required_in_loose
 	 */
-	eat(str, required) {
+	eat(str, required = false, required_in_loose = true) {
 		if (this.match(str)) {
 			this.index += str.length;
 			return true;
 		}
 
-		if (required) {
-			if (this.index === this.template.length) {
-				error(this.index, 'unexpected-eof', str);
-			} else {
-				error(this.index, 'expected-token', str);
-			}
+		if (required && (!this.loose || required_in_loose)) {
+			e.expected_token(this.index, str);
 		}
 
 		return false;
@@ -200,13 +229,13 @@ export class Parser {
 
 		let i = this.index;
 
-		const code = full_char_code_at(this.template, i);
+		const code = /** @type {number} */ (this.template.codePointAt(i));
 		if (!isIdentifierStart(code, true)) return null;
 
 		i += code <= 0xffff ? 1 : 2;
 
 		while (i < this.template.length) {
-			const code = full_char_code_at(this.template, i);
+			const code = /** @type {number} */ (this.template.codePointAt(i));
 
 			if (!isIdentifierChar(code, true)) break;
 			i += code <= 0xffff ? 1 : 2;
@@ -214,8 +243,8 @@ export class Parser {
 
 		const identifier = this.template.slice(this.index, (this.index = i));
 
-		if (!allow_reserved && reserved.includes(identifier)) {
-			error(start, 'unexpected-reserved-word', identifier);
+		if (!allow_reserved && is_reserved(identifier)) {
+			e.unexpected_reserved_word(start, identifier);
 		}
 
 		return identifier;
@@ -224,7 +253,8 @@ export class Parser {
 	/** @param {RegExp} pattern */
 	read_until(pattern) {
 		if (this.index >= this.template.length) {
-			error(this.template.length, 'unexpected-eof');
+			if (this.loose) return '';
+			e.unexpected_eof(this.template.length);
 		}
 
 		const start = this.index;
@@ -241,7 +271,7 @@ export class Parser {
 
 	require_whitespace() {
 		if (!regex_whitespace.test(this.template[this.index])) {
-			error(this.index, 'missing-whitespace');
+			e.expected_whitespace(this.index);
 		}
 
 		this.allow_whitespace();
@@ -253,41 +283,23 @@ export class Parser {
 	}
 
 	/**
-	 * @template T
-	 * @param {Omit<T, 'prev' | 'parent'>} node
+	 * @template {AST.Fragment['nodes'][number]} T
+	 * @param {T} node
 	 * @returns {T}
 	 */
 	append(node) {
-		const current = this.current();
-		const fragment = this.fragments.at(-1);
-
-		Object.defineProperties(node, {
-			prev: {
-				enumerable: false,
-				value: fragment?.nodes.at(-1) ?? null
-			},
-			parent: {
-				enumerable: false,
-				configurable: true,
-				value: current
-			}
-		});
-
-		// @ts-expect-error
-		fragment.nodes.push(node);
-
-		// @ts-expect-error
+		this.fragments.at(-1)?.nodes.push(node);
 		return node;
 	}
 }
 
 /**
  * @param {string} template
- * @returns {import('#compiler').Root}
+ * @param {boolean} [loose]
+ * @returns {AST.Root}
  */
-export function parse(template) {
-	const parser = new Parser(template);
-
+export function parse(template, loose = false) {
+	const parser = new Parser(template, loose);
 	return parser.root;
 }
 

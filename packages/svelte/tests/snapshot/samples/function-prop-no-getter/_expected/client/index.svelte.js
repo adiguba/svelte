@@ -1,34 +1,27 @@
-// index.svelte (Svelte VERSION)
-// Note: compiler output will change before 5.0 is released!
-import "svelte/internal/disclose-version";
-import * as $ from "svelte/internal";
+import 'svelte/internal/disclose-version';
+import * as $ from 'svelte/internal/client';
 
-export default function Function_prop_no_getter($$anchor, $$props) {
-	$.push($$props, true);
-
-	let count = $.source(0);
+export default function Function_prop_no_getter($$anchor) {
+	let count = $.state(0);
 
 	function onmouseup() {
-		$.set(count, $.proxy($.get(count) + 2));
+		$.set(count, $.get(count) + 2);
 	}
 
-	/* Init */
-	var fragment = $.comment($$anchor);
-	var node = $.child_frag(fragment);
+	const plusOne = (num) => num + 1;
 
-	Button(node, {
-		onmousedown: () => $.set(count, $.proxy($.get(count) + 1)),
+	Button($$anchor, {
+		onmousedown: () => $.set(count, $.get(count) + 1),
 		onmouseup,
+		onmouseenter: () => $.set(count, $.proxy(plusOne($.get(count)))),
 		children: ($$anchor, $$slotProps) => {
-			/* Init */
-			var node_1 = $.space($$anchor);
+			$.next();
 
-			/* Update */
-			$.text_effect(node_1, () => `clicks: ${$.stringify($.get(count))}`);
-			$.close($$anchor, node_1);
-		}
+			var text = $.text();
+
+			$.template_effect(() => $.set_text(text, `clicks: ${$.get(count) ?? ''}`));
+			$.append($$anchor, text);
+		},
+		$$slots: { default: true }
 	});
-
-	$.close_frag($$anchor, fragment);
-	$.pop();
 }

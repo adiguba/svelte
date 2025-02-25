@@ -1,22 +1,20 @@
+import { flushSync } from 'svelte';
 import { test } from '../../test';
-import { log } from './log.js';
 
 export default test({
 	html: `<button>0</button>`,
 
-	before_test() {
-		log.length = 0;
-	},
-
-	async test({ assert, target }) {
+	test({ assert, target, logs }) {
 		const btn = target.querySelector('button');
 
-		await btn?.click();
+		btn?.click();
+		flushSync();
 		assert.htmlEqual(target.innerHTML, `<button>1</button>`);
 
-		await btn?.click();
+		btn?.click();
+		flushSync();
 		assert.htmlEqual(target.innerHTML, `<button>2</button>`);
 
-		assert.deepEqual(log, [100]);
+		assert.deepEqual(logs, [100]);
 	}
 });

@@ -1,24 +1,25 @@
-import { error } from '../../../errors.js';
+/** @import { AST } from '#compiler' */
+/** @import { Parser } from '../index.js' */
+import * as e from '../../../errors.js';
 
 const REGEX_MATCHER = /^[~^$*|]?=/;
 const REGEX_CLOSING_BRACKET = /[\s\]]/;
 const REGEX_ATTRIBUTE_FLAGS = /^[a-zA-Z]+/; // only `i` and `s` are valid today, but make it future-proof
-const REGEX_COMBINATOR_WHITESPACE = /^\s*(\+|~|>|\|\|)\s*/;
 const REGEX_COMBINATOR = /^(\+|~|>|\|\|)/;
 const REGEX_PERCENTAGE = /^\d+(\.\d+)?%/;
-const REGEX_NTH_OF = /^\s*(even|odd|(-?[0-9]?n?(\s*\+\s*[0-9]+)?))(\s*(?=[,)])|\s+of\s+)/;
+const REGEX_NTH_OF =
+	/^(even|odd|\+?(\d+|\d*n(\s*[+-]\s*\d+)?)|-\d*n(\s*\+\s*\d+))((?=\s*[,)])|\s+of\s+)/;
 const REGEX_WHITESPACE_OR_COLON = /[\s:]/;
-const REGEX_BRACE_OR_SEMICOLON = /[{;]/;
 const REGEX_LEADING_HYPHEN_OR_DIGIT = /-?\d/;
 const REGEX_VALID_IDENTIFIER_CHAR = /[a-zA-Z0-9_-]/;
 const REGEX_COMMENT_CLOSE = /\*\//;
 const REGEX_HTML_COMMENT_CLOSE = /-->/;
 
 /**
- * @param {import('../index.js').Parser} parser
+ * @param {Parser} parser
  * @param {number} start
- * @param {Array<import('#compiler').Attribute | import('#compiler').SpreadAttribute | import('#compiler').Directive>} attributes
- * @returns {import('#compiler').Style}
+ * @param {Array<AST.Attribute | AST.SpreadAttribute | AST.Directive>} attributes
+ * @returns {AST.CSS.StyleSheet}
  */
 export default function read_style(parser, start, attributes) {
 	const content_start = parser.index;
@@ -28,7 +29,7 @@ export default function read_style(parser, start, attributes) {
 	parser.read(/^<\/style\s*>/);
 
 	return {
-		type: 'Style',
+		type: 'StyleSheet',
 		start,
 		end: parser.index,
 		attributes,
@@ -36,19 +37,19 @@ export default function read_style(parser, start, attributes) {
 		content: {
 			start: content_start,
 			end: content_end,
-			styles: parser.template.slice(content_start, content_end)
-		},
-		parent: null
+			styles: parser.template.slice(content_start, content_end),
+			comment: null
+		}
 	};
 }
 
 /**
- * @param {import('../index.js').Parser} parser
+ * @param {Parser} parser
  * @param {string} close
  * @returns {any[]}
  */
 function read_body(parser, close) {
-	/** @type {Array<import('#compiler').Css.Rule | import('#compiler').Css.Atrule>} */
+	/** @type {Array<AST.CSS.Rule | AST.CSS.Atrule>} */
 	const children = [];
 
 	while (parser.index < parser.template.length) {
@@ -65,12 +66,12 @@ function read_body(parser, close) {
 		}
 	}
 
-	error(parser.template.length, 'expected-token', close);
+	e.expected_token(parser.template.length, close);
 }
 
 /**
- * @param {import('../index.js').Parser} parser
- * @returns {import('#compiler').Css.Atrule}
+ * @param {Parser} parser
+ * @returns {AST.CSS.Atrule}
  */
 function read_at_rule(parser) {
 	const start = parser.index;
@@ -78,42 +79,16 @@ function read_at_rule(parser) {
 
 	const name = read_identifier(parser);
 
-	const prelude = parser.read_until(REGEX_BRACE_OR_SEMICOLON).trim();
+	const prelude = read_value(parser);
 
-	/** @type {import('#compiler').Css.Block | null} */
+	/** @type {AST.CSS.Block | null} */
 	let block = null;
 
 	if (parser.match('{')) {
-		// if the parser could easily distinguish between rules and declarations, this wouldn't be necessary.
-		// but this approach is much simpler. in future, when we support CSS nesting, the parser _will_ need
-		// to be able to distinguish between them, but since we'll also need other changes to support that
-		// this remains a TODO
-		const contains_declarations = [
-			'color-profile',
-			'counter-style',
-			'font-face',
-			'font-palette-values',
-			'page',
-			'property'
-		].includes(name);
-
-		if (contains_declarations) {
-			block = read_block(parser);
-		} else {
-			const start = parser.index;
-
-			parser.eat('{', true);
-			const children = read_body(parser, '}');
-			parser.eat('}', true);
-
-			block = {
-				type: 'Block',
-				start,
-				end: parser.index,
-				children
-			};
-		}
+		// e.g. `@media (...) {...}`
+		block = read_block(parser);
 	} else {
+		// e.g. `@import '...'`
 		parser.eat(';', true);
 	}
 
@@ -128,8 +103,8 @@ function read_at_rule(parser) {
 }
 
 /**
- * @param {import('../index.js').Parser} parser
- * @returns {import('#compiler').Css.Rule}
+ * @param {Parser} parser
+ * @returns {AST.CSS.Rule}
  */
 function read_rule(parser) {
 	const start = parser.index;
@@ -139,18 +114,25 @@ function read_rule(parser) {
 		prelude: read_selector_list(parser),
 		block: read_block(parser),
 		start,
-		end: parser.index
+		end: parser.index,
+		metadata: {
+			parent_rule: null,
+			has_local_selectors: false,
+			is_global_block: false
+		}
 	};
 }
 
 /**
- * @param {import('../index.js').Parser} parser
+ * @param {Parser} parser
  * @param {boolean} [inside_pseudo_class]
- * @returns {import('#compiler').Css.SelectorList}
+ * @returns {AST.CSS.SelectorList}
  */
 function read_selector_list(parser, inside_pseudo_class = false) {
-	/** @type {import('#compiler').Css.Selector[]} */
+	/** @type {AST.CSS.ComplexSelector[]} */
 	const children = [];
+
+	allow_comment_or_whitespace(parser);
 
 	const start = parser.index;
 
@@ -159,7 +141,7 @@ function read_selector_list(parser, inside_pseudo_class = false) {
 
 		const end = parser.index;
 
-		parser.allow_whitespace();
+		allow_comment_or_whitespace(parser);
 
 		if (inside_pseudo_class ? parser.match(')') : parser.match('{')) {
 			return {
@@ -174,72 +156,106 @@ function read_selector_list(parser, inside_pseudo_class = false) {
 		}
 	}
 
-	error(parser.template.length, 'unexpected-eof');
+	e.unexpected_eof(parser.template.length);
 }
 
 /**
- * @param {import('../index.js').Parser} parser
+ * @param {Parser} parser
  * @param {boolean} [inside_pseudo_class]
- * @returns {import('#compiler').Css.Selector}
+ * @returns {AST.CSS.ComplexSelector}
  */
 function read_selector(parser, inside_pseudo_class = false) {
 	const list_start = parser.index;
 
-	/** @type {Array<import('#compiler').Css.SimpleSelector | import('#compiler').Css.Combinator>} */
+	/** @type {AST.CSS.RelativeSelector[]} */
 	const children = [];
 
-	while (parser.index < parser.template.length) {
-		const start = parser.index;
+	/**
+	 * @param {AST.CSS.Combinator | null} combinator
+	 * @param {number} start
+	 * @returns {AST.CSS.RelativeSelector}
+	 */
+	function create_selector(combinator, start) {
+		return {
+			type: 'RelativeSelector',
+			combinator,
+			selectors: [],
+			start,
+			end: -1,
+			metadata: {
+				is_global: false,
+				is_global_like: false,
+				scoped: false
+			}
+		};
+	}
 
-		if (parser.eat('*')) {
+	/** @type {AST.CSS.RelativeSelector} */
+	let relative_selector = create_selector(null, parser.index);
+
+	while (parser.index < parser.template.length) {
+		let start = parser.index;
+
+		if (parser.eat('&')) {
+			relative_selector.selectors.push({
+				type: 'NestingSelector',
+				name: '&',
+				start,
+				end: parser.index
+			});
+		} else if (parser.eat('*')) {
 			let name = '*';
-			if (parser.match('|')) {
+
+			if (parser.eat('|')) {
 				// * is the namespace (which we ignore)
-				parser.index++;
 				name = read_identifier(parser);
 			}
 
-			children.push({
+			relative_selector.selectors.push({
 				type: 'TypeSelector',
 				name,
 				start,
 				end: parser.index
 			});
 		} else if (parser.eat('#')) {
-			children.push({
+			relative_selector.selectors.push({
 				type: 'IdSelector',
 				name: read_identifier(parser),
 				start,
 				end: parser.index
 			});
 		} else if (parser.eat('.')) {
-			children.push({
+			relative_selector.selectors.push({
 				type: 'ClassSelector',
 				name: read_identifier(parser),
 				start,
 				end: parser.index
 			});
 		} else if (parser.eat('::')) {
-			children.push({
+			relative_selector.selectors.push({
 				type: 'PseudoElementSelector',
 				name: read_identifier(parser),
 				start,
 				end: parser.index
 			});
+			// We read the inner selectors of a pseudo element to ensure it parses correctly,
+			// but we don't do anything with the result.
+			if (parser.eat('(')) {
+				read_selector_list(parser, true);
+				parser.eat(')', true);
+			}
 		} else if (parser.eat(':')) {
 			const name = read_identifier(parser);
 
-			/** @type {null | import('#compiler').Css.SelectorList} */
+			/** @type {null | AST.CSS.SelectorList} */
 			let args = null;
 
 			if (parser.eat('(')) {
 				args = read_selector_list(parser, true);
 				parser.eat(')', true);
-			} else if (name === 'global') {
-				error(parser.index, 'invalid-css-global-selector');
 			}
 
-			children.push({
+			relative_selector.selectors.push({
 				type: 'PseudoClassSelector',
 				name,
 				args,
@@ -268,7 +284,7 @@ function read_selector(parser, inside_pseudo_class = false) {
 			parser.allow_whitespace();
 			parser.eat(']', true);
 
-			children.push({
+			relative_selector.selectors.push({
 				type: 'AttributeSelector',
 				start,
 				end: parser.index,
@@ -277,38 +293,31 @@ function read_selector(parser, inside_pseudo_class = false) {
 				value,
 				flags
 			});
-		} else if (parser.match_regex(REGEX_COMBINATOR_WHITESPACE)) {
-			parser.allow_whitespace();
-			const start = parser.index;
-			children.push({
-				type: 'Combinator',
-				name: /** @type {string} */ (parser.read(REGEX_COMBINATOR)),
+		} else if (inside_pseudo_class && parser.match_regex(REGEX_NTH_OF)) {
+			// nth of matcher must come before combinator matcher to prevent collision else the '+' in '+2n-1' would be parsed as a combinator
+
+			relative_selector.selectors.push({
+				type: 'Nth',
+				value: /**@type {string} */ (parser.read(REGEX_NTH_OF)),
 				start,
 				end: parser.index
 			});
-			parser.allow_whitespace();
 		} else if (parser.match_regex(REGEX_PERCENTAGE)) {
-			children.push({
+			relative_selector.selectors.push({
 				type: 'Percentage',
 				value: /** @type {string} */ (parser.read(REGEX_PERCENTAGE)),
 				start,
 				end: parser.index
 			});
-		} else if (inside_pseudo_class && parser.match_regex(REGEX_NTH_OF)) {
-			children.push({
-				type: 'Nth',
-				value: /** @type {string} */ (parser.read(REGEX_NTH_OF)),
-				start,
-				end: parser.index
-			});
-		} else {
+		} else if (!parser.match_regex(REGEX_COMBINATOR)) {
 			let name = read_identifier(parser);
-			if (parser.match('|')) {
+
+			if (parser.eat('|')) {
 				// we ignore the namespace when trying to find matching element classes
-				parser.index++;
 				name = read_identifier(parser);
 			}
-			children.push({
+
+			relative_selector.selectors.push({
 				type: 'TypeSelector',
 				name,
 				start,
@@ -317,42 +326,95 @@ function read_selector(parser, inside_pseudo_class = false) {
 		}
 
 		const index = parser.index;
-		parser.allow_whitespace();
+		allow_comment_or_whitespace(parser);
 
 		if (parser.match(',') || (inside_pseudo_class ? parser.match(')') : parser.match('{'))) {
+			// rewind, so we know whether to continue building the selector list
 			parser.index = index;
 
+			relative_selector.end = index;
+			children.push(relative_selector);
+
 			return {
-				type: 'Selector',
+				type: 'ComplexSelector',
 				start: list_start,
 				end: index,
-				children
+				children,
+				metadata: {
+					rule: null,
+					used: false
+				}
 			};
 		}
 
-		if (parser.index !== index && !parser.match_regex(REGEX_COMBINATOR)) {
-			children.push({
-				type: 'Combinator',
-				name: ' ',
-				start: index,
-				end: parser.index
-			});
+		parser.index = index;
+		const combinator = read_combinator(parser);
+
+		if (combinator) {
+			if (relative_selector.selectors.length > 0) {
+				relative_selector.end = index;
+				children.push(relative_selector);
+			}
+
+			// ...and start a new one
+			relative_selector = create_selector(combinator, combinator.start);
+
+			parser.allow_whitespace();
+
+			if (parser.match(',') || (inside_pseudo_class ? parser.match(')') : parser.match('{'))) {
+				e.css_selector_invalid(parser.index);
+			}
 		}
 	}
 
-	error(parser.template.length, 'unexpected-eof');
+	e.unexpected_eof(parser.template.length);
 }
 
 /**
- * @param {import('../index.js').Parser} parser
- * @returns {import('#compiler').Css.Block}
+ * @param {Parser} parser
+ * @returns {AST.CSS.Combinator | null}
+ */
+function read_combinator(parser) {
+	const start = parser.index;
+	parser.allow_whitespace();
+
+	const index = parser.index;
+	const name = parser.read(REGEX_COMBINATOR);
+
+	if (name) {
+		const end = parser.index;
+		parser.allow_whitespace();
+
+		return {
+			type: 'Combinator',
+			name,
+			start: index,
+			end
+		};
+	}
+
+	if (parser.index !== start) {
+		return {
+			type: 'Combinator',
+			name: ' ',
+			start,
+			end: parser.index
+		};
+	}
+
+	return null;
+}
+
+/**
+ * @param {Parser} parser
+ * @returns {AST.CSS.Block}
  */
 function read_block(parser) {
 	const start = parser.index;
 
 	parser.eat('{', true);
 
-	/** @type {Array<import('#compiler').Css.Declaration | import('#compiler').Css.Rule>} */
+	/** @type {Array<AST.CSS.Declaration | AST.CSS.Rule | AST.CSS.Atrule>} */
 	const children = [];
 
 	while (parser.index < parser.template.length) {
@@ -361,7 +423,7 @@ function read_block(parser) {
 		if (parser.match('}')) {
 			break;
 		} else {
-			children.push(read_declaration(parser));
+			children.push(read_block_item(parser));
 		}
 	}
 
@@ -376,8 +438,29 @@ function read_block(parser) {
 }
 
 /**
- * @param {import('../index.js').Parser} parser
- * @returns {import('#compiler').Css.Declaration}
+ * Reads a declaration, rule or at-rule
+ *
+ * @param {Parser} parser
+ * @returns {AST.CSS.Declaration | AST.CSS.Rule | AST.CSS.Atrule}
+ */
+function read_block_item(parser) {
+	if (parser.match('@')) {
+		return read_at_rule(parser);
+	}
+
+	// read ahead to understand whether we're dealing with a declaration or a nested rule.
+	// this involves some duplicated work, but avoids a try-catch that would disguise errors
+	const start = parser.index;
+	read_value(parser);
+	const char = parser.template[parser.index];
+	parser.index = start;
+
+	return char === '{' ? read_rule(parser) : read_declaration(parser);
+}
+
+/**
+ * @param {Parser} parser
+ * @returns {AST.CSS.Declaration}
  */
 function read_declaration(parser) {
 	const start = parser.index;
@@ -385,9 +468,14 @@ function read_declaration(parser) {
 	const property = parser.read_until(REGEX_WHITESPACE_OR_COLON);
 	parser.allow_whitespace();
 	parser.eat(':');
+	let index = parser.index;
 	parser.allow_whitespace();
 
-	const value = read_declaration_value(parser);
+	const value = read_value(parser);
+
+	if (!value && !property.startsWith('--')) {
+		e.css_empty_declaration({ start, end: index });
+	}
 
 	const end = parser.index;
 
@@ -405,10 +493,10 @@ function read_declaration(parser) {
 }
 
 /**
- * @param {import('../index.js').Parser} parser
+ * @param {Parser} parser
  * @returns {string}
  */
-function read_declaration_value(parser) {
+function read_value(parser) {
 	let value = '';
 	let escaped = false;
 	let in_url = false;
@@ -432,7 +520,7 @@ function read_declaration_value(parser) {
 			quote_mark = char;
 		} else if (char === '(' && value.slice(-3) === 'url') {
 			in_url = true;
-		} else if ((char === ';' || char === '}') && !in_url && !quote_mark) {
+		} else if ((char === ';' || char === '{' || char === '}') && !in_url && !quote_mark) {
 			return value.trim();
 		}
 
@@ -441,13 +529,13 @@ function read_declaration_value(parser) {
 		parser.index++;
 	}
 
-	error(parser.template.length, 'unexpected-eof');
+	e.unexpected_eof(parser.template.length);
 }
 
 /**
  * Read a property that may or may not be quoted, e.g.
  * `foo` or `'foo bar'` or `"foo bar"`
- * @param {import('../index.js').Parser} parser
+ * @param {Parser} parser
  */
 function read_attribute_value(parser) {
 	let value = '';
@@ -474,20 +562,20 @@ function read_attribute_value(parser) {
 		parser.index++;
 	}
 
-	error(parser.template.length, 'unexpected-eof');
+	e.unexpected_eof(parser.template.length);
 }
 
 /**
- * https://www.w3.org/TR/CSS21/syndata.html#value-def-identifier
- * @param {import('../index.js').Parser} parser
+ * https://www.w3.org/TR/css-syntax-3/#ident-token-diagram
+ * @param {Parser} parser
  */
 function read_identifier(parser) {
 	const start = parser.index;
 
 	let identifier = '';
 
-	if (parser.match('--') || parser.match_regex(REGEX_LEADING_HYPHEN_OR_DIGIT)) {
-		error(start, 'invalid-css-identifier');
+	if (parser.match_regex(REGEX_LEADING_HYPHEN_OR_DIGIT)) {
+		e.css_expected_identifier(start);
 	}
 
 	let escaped = false;
@@ -512,13 +600,13 @@ function read_identifier(parser) {
 	}
 
 	if (identifier === '') {
-		error(start, 'invalid-css-identifier');
+		e.css_expected_identifier(start);
 	}
 
 	return identifier;
 }
 
-/** @param {import('../index.js').Parser} parser */
+/** @param {Parser} parser */
 function allow_comment_or_whitespace(parser) {
 	parser.allow_whitespace();
 	while (parser.match('/*') || parser.match('<!--')) {

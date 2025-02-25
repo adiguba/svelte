@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 
 import * as fs from 'node:fs';
-import { assert, expect } from 'vitest';
+import { assert } from 'vitest';
 import { compile_directory, should_update_expected } from '../helpers.js';
 import { assert_html_equal } from '../html_equal.js';
-import { suite, assert_ok } from '../suite.js';
+import { suite, assert_ok, type BaseTest } from '../suite.js';
 import { createClassComponent } from 'svelte/legacy';
+import { render } from 'svelte/server';
 import type { CompileOptions } from '#compiler';
+import { flushSync } from 'svelte';
 
-interface HydrationTest {
-	solo?: boolean;
-	skip?: boolean;
+interface HydrationTest extends BaseTest {
 	load_compiled?: boolean;
+	server_props?: Record<string, any>;
 	props?: Record<string, any>;
 	compileOptions?: Partial<CompileOptions>;
 	/**
@@ -32,35 +33,35 @@ interface HydrationTest {
 	) => void | Promise<void>;
 	before_test?: () => void;
 	after_test?: () => void;
+	errors?: any[];
+}
+
+function read(path: string): string | void {
+	return fs.existsSync(path) ? fs.readFileSync(path, 'utf-8') : undefined;
 }
 
 const { test, run } = suite<HydrationTest>(async (config, cwd) => {
-	/**
-	 * Read file and remove whitespace between ssr comments
-	 */
-	function read_html(path: string, fallback?: string): string {
-		const html = fs.readFileSync(fallback && !fs.existsSync(path) ? fallback : path, 'utf-8');
-		return config.trim_whitespace !== false
-			? html.replace(/(<!--ssr:.?-->)[ \t\n\r\f]+(<!--ssr:.?-->)/g, '$1$2')
-			: html;
-	}
-
 	if (!config.load_compiled) {
-		compile_directory(cwd, 'client', { accessors: true, ...config.compileOptions });
-		compile_directory(cwd, 'server', config.compileOptions);
+		await compile_directory(cwd, 'client', { accessors: true, ...config.compileOptions });
+		await compile_directory(cwd, 'server', config.compileOptions);
 	}
 
 	const target = window.document.body;
 	const head = window.document.head;
 
-	target.innerHTML = read_html(`${cwd}/_before.html`);
+	const rendered = render((await import(`${cwd}/_output/server/main.svelte.js`)).default, {
+		props: config.server_props ?? config.props ?? {}
+	});
 
-	let before_head;
-	try {
-		before_head = read_html(`${cwd}/_before_head.html`);
-		head.innerHTML = before_head;
-	} catch (err) {
-		// continue regardless of error
+	const override = read(`${cwd}/_override.html`);
+	const override_head = read(`${cwd}/_override_head.html`);
+
+	fs.writeFileSync(`${cwd}/_output/body.html`, rendered.html + '\n');
+	target.innerHTML = override ?? rendered.html;
+
+	if (rendered.head) {
+		fs.writeFileSync(`${cwd}/_output/head.html`, rendered.head + '\n');
+		head.innerHTML = override_head ?? rendered.head;
 	}
 
 	config.before_test?.();
@@ -68,55 +69,67 @@ const { test, run } = suite<HydrationTest>(async (config, cwd) => {
 	try {
 		const snapshot = config.snapshot ? config.snapshot(target) : {};
 
-		const error = console.error;
+		const warn = console.warn;
+		const errors: any[] = [];
 		let got_hydration_error = false;
-		console.error = (message: any) => {
-			if (typeof message === 'string' && message.startsWith('ERR_SVELTE_HYDRATION_MISMATCH')) {
-				got_hydration_error = true;
-				if (!config.expect_hydration_error) {
-					error(message);
+		console.warn = (...args: any[]) => {
+			if (args[0].startsWith('%c[svelte]')) {
+				// TODO convert this to structured data, for more robust comparison?
+				const text = args[0];
+				const code = text.slice(11, text.indexOf('\n%c', 11));
+				let message = text.slice(text.indexOf('%c', 2) + 2);
+
+				// Remove the "https://svelte.dev/e/..." link at the end
+				const lines = message.split('\n');
+				if (lines.at(-1)?.startsWith('https://svelte.dev/e/')) {
+					lines.pop();
+				}
+				message = lines.join('\n');
+
+				if (typeof message === 'string' && code === 'hydration_mismatch') {
+					got_hydration_error = true;
+					if (!config.expect_hydration_error) {
+						warn(message);
+					}
+				} else {
+					errors.push(message);
 				}
 			} else {
-				error(message);
+				errors.push(...args);
 			}
 		};
 
 		const component = createClassComponent({
 			component: (await import(`${cwd}/_output/client/main.svelte.js`)).default,
 			target,
+			hydrate: true,
 			props: config.props
 		});
 
-		console.error = error;
+		console.warn = warn;
+
 		if (config.expect_hydration_error) {
 			assert.ok(got_hydration_error, 'Expected hydration error');
 		} else {
 			assert.ok(!got_hydration_error, 'Unexpected hydration error');
 		}
 
-		try {
-			assert_html_equal(target.innerHTML, read_html(`${cwd}/_after.html`, `${cwd}/_before.html`));
-		} catch (error) {
-			if (should_update_expected()) {
-				fs.writeFileSync(`${cwd}/_after.html`, target.innerHTML);
-				console.log(`Updated ${cwd}/_after.html.`);
-			} else {
-				throw error;
-			}
+		if (config.errors) {
+			assert.deepEqual(errors, config.errors);
+		} else if (errors.length) {
+			throw new Error(`Unexpected errors: ${errors.join('\n')}`);
 		}
 
-		if (before_head) {
-			try {
-				const after_head = read_html(`${cwd}/_after_head.html`, `${cwd}/_before_head.html`);
-				assert_html_equal(head.innerHTML, after_head);
-			} catch (error) {
-				if (should_update_expected()) {
-					fs.writeFileSync(`${cwd}/_after_head.html`, head.innerHTML);
-					console.log(`Updated ${cwd}/_after_head.html.`);
-				} else {
-					throw error;
-				}
-			}
+		flushSync();
+
+		const normalize = (string: string) => string.trim().replace(/\r\n/g, '\n');
+
+		const expected = read(`${cwd}/_expected.html`) ?? rendered.html;
+		assert.equal(normalize(target.innerHTML), normalize(expected));
+
+		if (rendered.head) {
+			const expected = read(`${cwd}/_expected_head.html`) ?? rendered.head;
+			assert.equal(normalize(head.innerHTML), normalize(expected));
 		}
 
 		if (config.snapshot) {
