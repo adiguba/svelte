@@ -123,11 +123,11 @@ export function build_event_handler(node, metadata, context) {
 	}
 
 	// function declared in the script
-	if (
-		handler.type === 'Identifier' &&
-		context.state.scope.get(handler.name)?.declaration_kind !== 'import'
-	) {
-		return handler;
+	if (handler.type === 'Identifier') {
+		const kind = context.state.scope.get(handler.name)?.declaration_kind;
+		if (kind === 'function' || (!dev && kind !== 'import')) {
+			return handler;
+		}
 	}
 
 	if (metadata.has_call) {
