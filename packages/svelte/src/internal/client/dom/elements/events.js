@@ -302,18 +302,10 @@ export function apply(
 	has_side_effects = false,
 	remove_parens = false
 ) {
-	let handler;
-	let error;
-
+	
 	try {
-		handler = thunk();
-	} catch (e) {
-		error = e;
-	}
-
-	if (typeof handler === 'function') {
-		handler.apply(element, args);
-	} else if (has_side_effects || handler != null || error) {
+		thunk()?.apply(element, args);
+	} catch (error) {
 		const filename = component?.[FILENAME];
 		const location = loc ? ` at ${filename}:${loc[0]}:${loc[1]}` : ` in ${filename}`;
 
@@ -322,9 +314,6 @@ export function apply(
 		const suggestion = remove_parens ? 'remove the trailing `()`' : 'add a leading `() =>`';
 
 		w.event_handler_invalid(description, suggestion);
-
-		if (error) {
-			throw error;
-		}
+		throw error;
 	}
 }
