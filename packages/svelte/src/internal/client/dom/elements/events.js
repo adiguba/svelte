@@ -238,7 +238,7 @@ export function handle_event_propagation(event) {
 				var delegated = current_target['__' + event_name];
 
 				if (
-					delegated !== undefined &&
+					delegated != null &&
 					(!(/** @type {any} */ (current_target).disabled) ||
 						// DOM could've been updated already by the time this is reached, so we check this as well
 						// -> the target could not have been disabled because it emits the event in the first place
