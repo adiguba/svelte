@@ -44,10 +44,14 @@ export function visit_event_attribute(node, context) {
 				node.metadata.delegated.function.metadata.hoisted_params
 			);
 
-			// When we hoist a function we assign an array with the function and all
-			// hoisted closure params.
-			const args = [handler, ...hoisted_params];
-			delegated_assignment = b.array(args);
+			if (hoisted_params.length) {
+				// When we hoist a function we assign an array with the function and all
+				// hoisted closure params.
+				const args = [handler, ...hoisted_params];
+				delegated_assignment = b.array(args);
+			} else {
+				delegated_assignment = handler;
+			}
 		} else {
 			delegated_assignment = handler;
 		}
